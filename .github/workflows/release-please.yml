@@ -13,13 +13,94 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  packages: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      epg_generator_released: ${{ steps.release.outputs['epg_generator--release_created'] }}
+      epg_generator_tag: ${{ steps.release.outputs['epg_generator--tag_name'] }}
+      epg_admin_released: ${{ steps.release.outputs['epg_admin--release_created'] }}
+      epg_admin_tag: ${{ steps.release.outputs['epg_admin--tag_name'] }}
     steps:
       - name: Run release-please
+        id: release
         uses: googleapis/release-please-action@v4
         with:
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+
+  epg-generator-release-image:
+    needs: release-please
+    if: needs.release-please.outputs.epg_generator_released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute release tags
+        id: vars
+        shell: bash
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-generator"
+          TAG="${{ needs.release-please.outputs.epg_generator_tag }}"
+          VERSION="${TAG#epg-generator-v}"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push epg-generator release image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./epg_generator
+          file: ./epg_generator/Dockerfile
+          push: true
+          tags: ${{ steps.vars.outputs.tags }}
+
+  epg-admin-release-image:
+    needs: release-please
+    if: needs.release-please.outputs.epg_admin_released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute release tags
+        id: vars
+        shell: bash
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-epg-admin"
+          TAG="${{ needs.release-please.outputs.epg_admin_tag }}"
+          VERSION="${TAG#epg-admin-v}"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push epg-admin release image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./epg_admin
+          file: ./epg_admin/Dockerfile
+          push: true
+          tags: ${{ steps.vars.outputs.tags }}

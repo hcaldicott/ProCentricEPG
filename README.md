@@ -301,7 +301,8 @@ This repository includes GitHub Actions automation for CI, release management, a
   using Release Please (`.github/workflows/release-please.yml`)
 - **Automatic container builds/pushes to GHCR** via `.github/workflows/containers.yml`
   - Pushes to `main` publish `edge` + `sha-<shortsha>` tags
-  - Release tags publish `<version>` + `latest` tags
+- **Release image publishing** via `.github/workflows/release-please.yml`
+  - Component releases publish `<version>` + `latest` tags for each released component
 
 ### Container Image Names (GHCR)
 

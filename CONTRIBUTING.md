@@ -43,13 +43,13 @@ Container publishing and releases are related but not strictly dependent.
 
 After PR merge to `main`:
 1. `containers.yml` runs on push to `main` and publishes:
-   - build-channel tags (for example `edge`)
+   - build-channel tags (`edge`)
    - `sha-<shortsha>`
 2. `release-please.yml` updates/opens release PR(s) for changed component(s).
 3. When release PR(s) are merged, tags are created:
    - `epg-generator-vX.Y.Z`
    - `epg-admin-vX.Y.Z`
-4. `containers.yml` runs again on tag push and publishes:
+4. `release-please.yml` also builds and publishes release images for released components:
    - `:<version>`
    - `:latest`
 
