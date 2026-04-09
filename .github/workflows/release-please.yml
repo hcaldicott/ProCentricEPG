@@ -16,24 +16,60 @@ permissions:
   packages: write
 
 jobs:
-  release-please:
+  changes:
     runs-on: ubuntu-latest
     outputs:
-      epg_generator_released: ${{ steps.release.outputs['epg_generator--release_created'] }}
-      epg_generator_tag: ${{ steps.release.outputs['epg_generator--tag_name'] }}
-      epg_admin_released: ${{ steps.release.outputs['epg_admin--release_created'] }}
-      epg_admin_tag: ${{ steps.release.outputs['epg_admin--tag_name'] }}
+      epg_generator_changed: ${{ steps.filter.outputs.epg_generator }}
+      epg_admin_changed: ${{ steps.filter.outputs.epg_admin }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect changed package paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            epg_generator:
+              - 'epg_generator/**'
+            epg_admin:
+              - 'epg_admin/**'
+
+  release-please-epg-generator:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.epg_generator_changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs['epg_generator--release_created'] }}
+      tag: ${{ steps.release.outputs['epg_generator--tag_name'] }}
     steps:
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@v4
         with:
+          path: epg_generator
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+
+  release-please-epg-admin:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.epg_admin_changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs['epg_admin--release_created'] }}
+      tag: ${{ steps.release.outputs['epg_admin--tag_name'] }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          path: epg_admin
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
 
   epg-generator-release-image:
-    needs: release-please
-    if: needs.release-please.outputs.epg_generator_released == 'true'
+    needs: release-please-epg-generator
+    if: needs.release-please-epg-generator.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -51,7 +87,7 @@ jobs:
         shell: bash
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-generator"
-          TAG="${{ needs.release-please.outputs.epg_generator_tag }}"
+          TAG="${{ needs.release-please-epg-generator.outputs.tag }}"
           VERSION="${TAG#epg-generator-v}"
           {
             echo "tags<<EOF"
@@ -69,8 +105,8 @@ jobs:
           tags: ${{ steps.vars.outputs.tags }}
 
   epg-admin-release-image:
-    needs: release-please
-    if: needs.release-please.outputs.epg_admin_released == 'true'
+    needs: release-please-epg-admin
+    if: needs.release-please-epg-admin.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -87,8 +123,8 @@ jobs:
         id: vars
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-epg-admin"
-          TAG="${{ needs.release-please.outputs.epg_admin_tag }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-admin"
+          TAG="${{ needs.release-please-epg-admin.outputs.tag }}"
           VERSION="${TAG#epg-admin-v}"
           {
             echo "tags<<EOF"

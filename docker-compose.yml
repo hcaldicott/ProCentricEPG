@@ -114,9 +114,9 @@ services:
       - epg-generator
 
   epg-admin:
-    image: "${EPG_ADMIN_IMAGE:-ghcr.io/hcaldicott/procentric-epg-epg-admin:latest}"
+    image: "${EPG_ADMIN_IMAGE:-ghcr.io/hcaldicott/procentric-epg-admin:latest}"
     pull_policy: always
-    container_name: procentric-epg-epg-admin
+    container_name: procentric-epg-admin
     environment:
       PORT: "8081"
       SFTPGO_API_BASE_URL: "http://ftp-server:8080/api/v2"

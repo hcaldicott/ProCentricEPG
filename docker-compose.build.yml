@@ -10,5 +10,5 @@ services:
     build:
       context: ./epg_admin
       dockerfile: Dockerfile
-    image: "procentric-epg-epg-admin:local"
+    image: "procentric-epg-admin:local"
     pull_policy: never

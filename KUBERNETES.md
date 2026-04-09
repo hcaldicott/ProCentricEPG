@@ -37,7 +37,7 @@ k8s/
 Base manifests pull prebuilt images from GHCR by default:
 
 - `ghcr.io/hcaldicott/procentric-epg-generator:latest`
-- `ghcr.io/hcaldicott/procentric-epg-epg-admin:latest`
+- `ghcr.io/hcaldicott/procentric-epg-admin:latest`
 
 If you need to pin a specific tag or use your own registry, add an `images:` override in your local kustomization:
 
@@ -46,8 +46,8 @@ images:
   - name: ghcr.io/hcaldicott/procentric-epg-generator
     newName: ghcr.io/<owner>/procentric-epg-generator
     newTag: "1.2.3"
-  - name: ghcr.io/hcaldicott/procentric-epg-epg-admin
-    newName: ghcr.io/<owner>/procentric-epg-epg-admin
+  - name: ghcr.io/hcaldicott/procentric-epg-admin
+    newName: ghcr.io/<owner>/procentric-epg-admin
     newTag: "1.2.3"
 ```
 

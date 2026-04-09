@@ -53,13 +53,13 @@ By default, `docker-compose.yml` pulls `epg-generator` and `epg-admin` images fr
 
 Default image references:
 - `EPG_GENERATOR_IMAGE=ghcr.io/hcaldicott/procentric-epg-generator:latest`
-- `EPG_ADMIN_IMAGE=ghcr.io/hcaldicott/procentric-epg-epg-admin:latest`
+- `EPG_ADMIN_IMAGE=ghcr.io/hcaldicott/procentric-epg-admin:latest`
 - `SFTPGO_IMAGE=drakkan/sftpgo:latest`
 
 Override images without editing Compose:
 ```bash
 EPG_GENERATOR_IMAGE=ghcr.io/<owner>/procentric-epg-generator:1.2.3 \
-EPG_ADMIN_IMAGE=ghcr.io/<owner>/procentric-epg-epg-admin:1.2.3 \
+EPG_ADMIN_IMAGE=ghcr.io/<owner>/procentric-epg-admin:1.2.3 \
 docker compose up -d
 ```
 
@@ -523,7 +523,7 @@ Monitor the containers using:
 
 ```bash
 # Resource usage
-docker stats procentric-epg-generator procentric-epg-ftp-server procentric-epg-epg-admin
+docker stats procentric-epg-generator procentric-epg-ftp-server procentric-epg-admin
 
 # Health checks
 docker ps --filter name=procentric

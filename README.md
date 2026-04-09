@@ -33,7 +33,7 @@ docker-compose up -d
 
 This Compose stack now pulls prebuilt images from GHCR by default:
 - `ghcr.io/hcaldicott/procentric-epg-generator:latest`
-- `ghcr.io/hcaldicott/procentric-epg-epg-admin:latest`
+- `ghcr.io/hcaldicott/procentric-epg-admin:latest`
 
 To build `epg_generator` and `epg_admin` locally from source instead:
 ```bash
@@ -307,7 +307,7 @@ This repository includes GitHub Actions automation for CI, release management, a
 ### Container Image Names (GHCR)
 
 - `ghcr.io/<org-or-user>/procentric-epg-generator`
-- `ghcr.io/<org-or-user>/procentric-epg-epg-admin`
+- `ghcr.io/<org-or-user>/procentric-epg-admin`
 
 ### One-Time GitHub Setup
 

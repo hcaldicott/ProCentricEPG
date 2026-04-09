@@ -65,7 +65,7 @@ jobs:
         id: vars
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-epg-admin"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-admin"
           SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
           {
             echo "tags<<EOF"
