@@ -32,8 +32,8 @@ docker-compose up -d
 ```
 
 This Compose stack now pulls prebuilt images from GHCR by default:
-- `ghcr.io/hcaldicott/procentric-epg-generator:edge`
-- `ghcr.io/hcaldicott/procentric-epg-epg-admin:edge`
+- `ghcr.io/hcaldicott/procentric-epg-generator:latest`
+- `ghcr.io/hcaldicott/procentric-epg-epg-admin:latest`
 
 To build `epg_generator` and `epg_admin` locally from source instead:
 ```bash
@@ -449,8 +449,4 @@ Thanks to [garethcheyne](https://github.com/garethcheyne) for the original code 
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
-- Additional EPG data sources
-- Support for other regions
-- Enhanced error handling
-- Performance optimizations
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, conventional commit/versioning rules, and release/container workflow details.

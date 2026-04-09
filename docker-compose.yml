@@ -1,6 +1,6 @@
 services:
   epg-generator:
-    image: "${EPG_GENERATOR_IMAGE:-ghcr.io/hcaldicott/procentric-epg-generator:edge}"
+    image: "${EPG_GENERATOR_IMAGE:-ghcr.io/hcaldicott/procentric-epg-generator:latest}"
     pull_policy: always
     container_name: procentric-epg-generator
     environment:
@@ -114,7 +114,7 @@ services:
       - epg-generator
 
   epg-admin:
-    image: "${EPG_ADMIN_IMAGE:-ghcr.io/hcaldicott/procentric-epg-epg-admin:edge}"
+    image: "${EPG_ADMIN_IMAGE:-ghcr.io/hcaldicott/procentric-epg-epg-admin:latest}"
     pull_policy: always
     container_name: procentric-epg-epg-admin
     environment:

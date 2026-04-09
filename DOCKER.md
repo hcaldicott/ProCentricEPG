@@ -52,8 +52,8 @@ By default, `docker-compose.yml` pulls `epg-generator` and `epg-admin` images fr
 ### Image Sources
 
 Default image references:
-- `EPG_GENERATOR_IMAGE=ghcr.io/hcaldicott/procentric-epg-generator:edge`
-- `EPG_ADMIN_IMAGE=ghcr.io/hcaldicott/procentric-epg-epg-admin:edge`
+- `EPG_GENERATOR_IMAGE=ghcr.io/hcaldicott/procentric-epg-generator:latest`
+- `EPG_ADMIN_IMAGE=ghcr.io/hcaldicott/procentric-epg-epg-admin:latest`
 - `SFTPGO_IMAGE=drakkan/sftpgo:latest`
 
 Override images without editing Compose:
