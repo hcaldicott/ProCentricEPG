@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "epg-generator-v*"
-      - "epg-admin-v*"
   workflow_dispatch:
 
 env:
@@ -18,7 +15,6 @@ permissions:
 
 jobs:
   epg-generator-image:
-    if: github.ref_type != 'tag' || startsWith(github.ref_name, 'epg-generator-v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,23 +32,13 @@ jobs:
         shell: bash
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-generator"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#epg-generator-v}"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:${VERSION}"
-              echo "${IMAGE}:latest"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-          else
-            SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:edge"
-              echo "${IMAGE}:sha-${SHA_SHORT}"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-          fi
+          SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:edge"
+            echo "${IMAGE}:sha-${SHA_SHORT}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Build and push epg-generator image
         uses: docker/build-push-action@v6
@@ -63,7 +49,6 @@ jobs:
           tags: ${{ steps.vars.outputs.tags }}
 
   epg-admin-image:
-    if: github.ref_type != 'tag' || startsWith(github.ref_name, 'epg-admin-v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,23 +66,13 @@ jobs:
         shell: bash
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/procentric-epg-epg-admin"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#epg-admin-v}"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:${VERSION}"
-              echo "${IMAGE}:latest"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-          else
-            SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:edge"
-              echo "${IMAGE}:sha-${SHA_SHORT}"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-          fi
+          SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:edge"
+            echo "${IMAGE}:sha-${SHA_SHORT}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Build and push epg-admin image
         uses: docker/build-push-action@v6
