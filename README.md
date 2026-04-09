@@ -31,6 +31,15 @@ The easiest way to run this project is using Docker. See [DOCKER.md](DOCKER.md) 
 docker-compose up -d
 ```
 
+This Compose stack now pulls prebuilt images from GHCR by default:
+- `ghcr.io/hcaldicott/procentric-epg-generator:edge`
+- `ghcr.io/hcaldicott/procentric-epg-epg-admin:edge`
+
+To build `epg_generator` and `epg_admin` locally from source instead:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
 This will:
 - Run EPG generation automatically at midnight daily (configurable)
 - Expose generated bundles via FTP server

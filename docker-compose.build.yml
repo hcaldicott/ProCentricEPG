@@ -1,0 +1,14 @@
+services:
+  epg-generator:
+    build:
+      context: ./epg_generator
+      dockerfile: Dockerfile
+    image: "procentric-epg-generator:local"
+    pull_policy: never
+
+  epg-admin:
+    build:
+      context: ./epg_admin
+      dockerfile: Dockerfile
+    image: "procentric-epg-epg-admin:local"
+    pull_policy: never

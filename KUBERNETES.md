@@ -32,22 +32,26 @@ k8s/
     public-ftp/
 ```
 
-## 1) Build and Push Application Images
+## 1) Container Images (GHCR Default)
 
-Kubernetes cannot build local Dockerfiles directly from manifests. Build and push both custom images first:
+Base manifests pull prebuilt images from GHCR by default:
 
-```bash
-docker build -t <registry>/procentric-epg-generator:<tag> -f epg_generator/Dockerfile ./epg_generator
-docker push <registry>/procentric-epg-generator:<tag>
+- `ghcr.io/hcaldicott/procentric-epg-generator:edge`
+- `ghcr.io/hcaldicott/procentric-epg-epg-admin:edge`
 
-docker build -t <registry>/procentric-epg-epg-admin:<tag> -f epg_admin/Dockerfile ./epg_admin
-docker push <registry>/procentric-epg-epg-admin:<tag>
+If you need to pin a specific tag or use your own registry, add an `images:` override in your local kustomization:
+
+```yaml
+images:
+  - name: ghcr.io/hcaldicott/procentric-epg-generator
+    newName: ghcr.io/<owner>/procentric-epg-generator
+    newTag: "1.2.3"
+  - name: ghcr.io/hcaldicott/procentric-epg-epg-admin
+    newName: ghcr.io/<owner>/procentric-epg-epg-admin
+    newTag: "1.2.3"
 ```
 
-Then set image references in the base manifests (or patch them with your own overlay):
-
-- `k8s/base/deployment-epg-generator.yaml`
-- `k8s/base/deployment-epg-admin.yaml`
+If your registry is private, configure `imagePullSecrets` in your overlay.
 
 ## 2) Set SFTPGo Admin Credentials
 

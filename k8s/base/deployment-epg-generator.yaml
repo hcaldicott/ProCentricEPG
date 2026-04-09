@@ -25,8 +25,8 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: epg-generator
-          image: procentric-epg-generator:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/hcaldicott/procentric-epg-generator:edge
+          imagePullPolicy: Always
           env:
             - name: CRON_SCHEDULE
               value: "0 0 * * *"

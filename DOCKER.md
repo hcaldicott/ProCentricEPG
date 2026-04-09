@@ -25,6 +25,8 @@ Health checks:
 
 ### Basic Usage
 
+By default, `docker-compose.yml` pulls `epg-generator` and `epg-admin` images from GHCR.
+
 1. **Start the services**:
    ```bash
    docker-compose up -d
@@ -46,6 +48,25 @@ Health checks:
    ```bash
    docker-compose down
    ```
+
+### Image Sources
+
+Default image references:
+- `EPG_GENERATOR_IMAGE=ghcr.io/hcaldicott/procentric-epg-generator:edge`
+- `EPG_ADMIN_IMAGE=ghcr.io/hcaldicott/procentric-epg-epg-admin:edge`
+- `SFTPGO_IMAGE=drakkan/sftpgo:latest`
+
+Override images without editing Compose:
+```bash
+EPG_GENERATOR_IMAGE=ghcr.io/<owner>/procentric-epg-generator:1.2.3 \
+EPG_ADMIN_IMAGE=ghcr.io/<owner>/procentric-epg-epg-admin:1.2.3 \
+docker compose up -d
+```
+
+Use local source builds with the build override:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 ## Configuration
 
@@ -557,10 +578,16 @@ docker run -d \
    git pull origin main
    ```
 
-2. Rebuild and restart:
+2. Pull fresh images and restart:
    ```bash
-   docker-compose up -d --build
+   docker compose pull
+   docker compose up -d
    ```
+
+If using local source builds, use:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 ### Clean Old Bundles
 
