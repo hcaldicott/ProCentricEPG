@@ -1,8 +1,7 @@
 services:
   epg-generator:
-    build:
-      context: ./epg_generator
-      dockerfile: Dockerfile
+    image: "${EPG_GENERATOR_IMAGE:-ghcr.io/hcaldicott/procentric-epg-generator:latest}"
+    pull_policy: always
     container_name: procentric-epg-generator
     environment:
       # Cron schedule for EPG generation (default: midnight daily)
@@ -39,7 +38,8 @@ services:
     restart: unless-stopped
 
   ftp-server:
-    image: drakkan/sftpgo:latest
+    image: "${SFTPGO_IMAGE:-drakkan/sftpgo:latest}"
+    pull_policy: always
     container_name: procentric-epg-ftp-server
     environment:
       # Enable FTP on port 21 (same as current deployment)
@@ -114,9 +114,8 @@ services:
       - epg-generator
 
   epg-admin:
-    build:
-      context: ./epg_admin
-      dockerfile: Dockerfile
+    image: "${EPG_ADMIN_IMAGE:-ghcr.io/hcaldicott/procentric-epg-epg-admin:latest}"
+    pull_policy: always
     container_name: procentric-epg-epg-admin
     environment:
       PORT: "8081"
