@@ -1,0 +1,18 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Misc
+*.log
+.env
+.DS_Store

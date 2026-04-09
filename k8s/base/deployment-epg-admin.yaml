@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epg-admin
+  namespace: procentric-epg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: epg-admin
+  template:
+    metadata:
+      labels:
+        app: epg-admin
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ftp-server
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: epg-admin
+          image: procentric-epg-epg-admin:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-metrics
+              containerPort: 8081
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          env:
+            - name: PORT
+              value: "8081"
+            - name: SFTPGO_API_BASE_URL
+              value: "http://ftp-server:8080/api/v2"
+            - name: SFTPGO_API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: username
+            - name: SFTPGO_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: password
+            - name: STALE_AFTER_HOURS
+              value: "24"
+            - name: REFRESH_INTERVAL_SECONDS
+              value: "60"
+            - name: API_TIMEOUT_SECONDS
+              value: "10"
+            - name: WAITRESS_THREADS
+              value: "2"
+            - name: WAITRESS_CONNECTION_LIMIT
+              value: "50"
+            - name: MERGE_SFTPGO_NATIVE_METRICS
+              value: "true"
+            - name: SFTPGO_NATIVE_METRICS_URL
+              value: "http://ftp-server-metrics:10000/metrics"

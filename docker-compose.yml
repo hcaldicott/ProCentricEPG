@@ -1,0 +1,153 @@
+services:
+  epg-generator:
+    build:
+      context: ./epg_generator
+      dockerfile: Dockerfile
+    container_name: procentric-epg-generator
+    environment:
+      # Cron schedule for EPG generation (default: midnight daily)
+      # Format: minute hour day month weekday
+      # Examples:
+      #   0 0 * * *    - Every day at midnight (default)
+      #   0 */6 * * *  - Every 6 hours
+      #   0 2 * * *    - Every day at 2 AM
+      CRON_SCHEDULE: "0 0 * * *"
+
+      # Timezone (default: UTC)
+      # Examples: America/New_York, Europe/London, Pacific/Auckland
+      TZ: "UTC"
+
+      # Output directory (mapped to /bundles inside container)
+      OUTPUT_DIR: "/bundles"
+
+      # Logging level (default: INFO)
+      # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      LOG_LEVEL: "INFO"
+
+      # Webhook notifications for errors (optional)
+      # WEBHOOK_URL: ""              # Webhook URL (Teams, Discord, Slack, or generic)
+      # WEBHOOK_TYPE: "auto"         # auto (default), teams, discord, slack, generic
+      # WEBHOOK_NOTIFY_SUCCESS: "false"  # Set to "true" to send notifications on success
+
+      # Set to "true" to run once and exit (useful for testing)
+      # RUN_ONCE: "true"
+
+    volumes:
+      # Mount the bundles directory to host
+      - bundles:/bundles
+
+    restart: unless-stopped
+
+  ftp-server:
+    image: drakkan/sftpgo:latest
+    container_name: procentric-epg-ftp-server
+    environment:
+      # Enable FTP on port 21 (same as current deployment)
+      SFTPGO_FTPD__BINDINGS__0__PORT: "21"
+      SFTPGO_FTPD__BINDINGS__0__ADDRESS: "0.0.0.0"
+      SFTPGO_FTPD__DISABLE_ACTIVE_MODE: "0"
+
+      # Keep passive mode behavior/range aligned with existing setup.
+      SFTPGO_FTPD__PASSIVE_PORT_RANGE__START: "21100"
+      SFTPGO_FTPD__PASSIVE_PORT_RANGE__END: "21110"
+      SFTPGO_FTPD__BINDINGS__0__FORCE_PASSIVE_IP: "127.0.0.1"
+
+      # Admin UI/API (for per-customer credentials management)
+      SFTPGO_HTTPD__BINDINGS__0__PORT: "8080"
+      SFTPGO_HTTPD__BINDINGS__0__ADDRESS: "0.0.0.0"
+      SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_ADMIN: "${SFTPGO_ENABLE_WEB_ADMIN_UI:-0}"
+      SFTPGO_HTTPD__BINDINGS__0__ENABLE_REST_API: "1"
+      SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_CLIENT: "0"
+      SFTPGO_HTTPD__BINDINGS__0__RENDER_OPENAPI: "0"
+      SFTPGO_HTTPD__TOKEN_VALIDATION: "1"
+      SFTPGO_HTTPD__BINDINGS__0__BRANDING__WEB_ADMIN__NAME: "ProCentric EPG Generator WebAdmin"
+      SFTPGO_HTTPD__BINDINGS__0__BRANDING__WEB_ADMIN__SHORT_NAME: "EPG WebAdmin"
+      SFTPGO_HTTPD__SIGNING_PASSPHRASE_FILE: "/var/lib/sftpgo/signing_passphrase"
+
+      # Disable unused protocol listeners.
+      SFTPGO_SFTPD__BINDINGS__0__PORT: "0"
+      SFTPGO_WEBDAVD__BINDINGS__0__PORT: "0"
+
+      # Expose Prometheus metrics endpoint so that epg-admin can scrape and merge with its own metrics.
+      SFTPGO_TELEMETRY__BIND_PORT: "10000"
+      SFTPGO_TELEMETRY__BIND_ADDRESS: "0.0.0.0"
+      SFTPGO_DATA_PROVIDER__NAME: "/var/lib/sftpgo/sftpgo.db"
+      SFTPGO_DATA_PROVIDER__BACKUPS_PATH: "/var/lib/sftpgo/backups"
+
+      # Create initial admin account on first startup.
+      SFTPGO_DEFAULT_ADMIN_USERNAME: "${SFTPGO_ADMIN_USERNAME:-admin}"
+      SFTPGO_DEFAULT_ADMIN_PASSWORD: "${SFTPGO_ADMIN_PASSWORD:-Password4Partners}"
+      SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN: "1"
+
+    ports:
+      # FTP control port
+      - "21:21"
+
+      # Passive mode ports
+      - "21100-21110:21100-21110"
+      # SFTPGo admin UI / REST API
+      - "8080:8080"
+    volumes:
+      # Persist SFTPGo state (users, DB, config artifacts)
+      - sftpgo-data:/var/lib/sftpgo
+      # Share generated EPG bundles for serving to FTP clients.
+      - bundles:/srv/epg:ro
+
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if [ ! -s /var/lib/sftpgo/signing_passphrase ]; then
+          tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 >/var/lib/sftpgo/signing_passphrase
+          chmod 600 /var/lib/sftpgo/signing_passphrase
+        fi
+        exec sftpgo serve
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sftpgo", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      - epg-generator
+
+  epg-admin:
+    build:
+      context: ./epg_admin
+      dockerfile: Dockerfile
+    container_name: procentric-epg-epg-admin
+    environment:
+      PORT: "8081"
+      SFTPGO_API_BASE_URL: "http://ftp-server:8080/api/v2"
+      SFTPGO_API_USERNAME: "${SFTPGO_ADMIN_USERNAME:-admin}"
+      SFTPGO_API_PASSWORD: "${SFTPGO_ADMIN_PASSWORD:-Password4Partners}"
+      STALE_AFTER_HOURS: "24"
+      REFRESH_INTERVAL_SECONDS: "60"
+      API_TIMEOUT_SECONDS: "10"
+      WAITRESS_THREADS: "2"
+      WAITRESS_CONNECTION_LIMIT: "50"
+      MERGE_SFTPGO_NATIVE_METRICS: "true"
+      SFTPGO_NATIVE_METRICS_URL: "http://ftp-server:10000/metrics"
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=3).status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      - ftp-server
+
+volumes:
+  bundles:
+  sftpgo-data:

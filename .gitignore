@@ -1,0 +1,42 @@
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local runtime/config secrets
+.env
+*.log
+credentials.yaml
+
+# Project runtime outputs
+/bundles/
+/output/
+/debug/
+/epg_generator/output/
+/epg_generator/debug/
+
+# Local-only Kubernetes overrides
+# Use these naming conventions for personal, non-committed patches.
+k8s/**/kustomization.local.yaml
+k8s/**/*.local.yaml
+k8s/local/

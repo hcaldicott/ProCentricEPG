@@ -1,0 +1,75 @@
+{
+  "title": "SFTPGo User No Recent Login",
+  "ruleGroup": "sftpgo-user-staleness",
+  "folderUID": "general",
+  "for": "0s",
+  "noDataState": "NoData",
+  "execErrState": "Error",
+  "condition": "B",
+  "labels": {
+    "severity": "warning"
+  },
+  "annotations": {
+    "summary": "SFTPGo user stale",
+    "description": "At least one enabled SFTPGo user has not logged in within threshold."
+  },
+  "data": [
+    {
+      "refId": "A",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "PROMETHEUS_DS_UID",
+      "model": {
+        "editorMode": "code",
+        "expr": "max by (username, customer_label) (sftpgo_user_stale{status=\"enabled\"})",
+        "instant": true,
+        "intervalMs": 1000,
+        "legendFormat": "{{username}} ({{customer_label}})",
+        "maxDataPoints": 43200,
+        "range": false,
+        "refId": "A"
+      }
+    },
+    {
+      "refId": "B",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "type": "threshold",
+        "expression": "A",
+        "refId": "B",
+        "conditions": [
+          {
+            "type": "query",
+            "query": {
+              "params": [
+                "A"
+              ]
+            },
+            "reducer": {
+              "type": "last",
+              "params": []
+            },
+            "evaluator": {
+              "type": "gt",
+              "params": [
+                0
+              ]
+            },
+            "operator": {
+              "type": "and"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "isPaused": false
+}

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPG Admin Users</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+</head>
+<body>
+  <main class="container">
+    <div class="top">
+      <h2>EPG Admin</h2>
+      <div class="top-actions">
+        <a class="btn btn-primary" href="{{ url_for('admin_create_user') }}">Create Customer</a>
+        <form class="inline" method="post" action="{{ url_for('admin_logout') }}">
+          <button class="btn btn-secondary" type="submit">Logout</button>
+        </form>
+      </div>
+    </div>
+
+    <p>Signed in as <strong>{{ admin_username }}</strong>. Last refresh: {{ refreshed_at }}</p>
+    {% if notice %}<p class="ok">{{ notice }}</p>{% endif %}
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Label</th>
+          <th>Status</th>
+          <th>Last Login</th>
+          <th>Stale</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.label }}</td>
+          <td>{{ u.status }}</td>
+          <td>{{ u.last_login }}</td>
+          <td class="{{ 'warn' if u.stale else 'ok' }}">{{ 'Yes' if u.stale else 'No' }}</td>
+          <td>
+            {% if u.enabled %}
+            <form class="inline" method="post" action="{{ url_for('admin_disable_user', username=u.username) }}">
+              <button class="btn btn-danger" type="submit">Disable</button>
+            </form>
+            {% endif %}
+            <form class="inline" method="post" action="{{ url_for('admin_reset_password', username=u.username) }}">
+              <input class="reset-password-input" name="new_password" placeholder="New password" />
+              <button class="btn btn-secondary" type="submit">Reset Password</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

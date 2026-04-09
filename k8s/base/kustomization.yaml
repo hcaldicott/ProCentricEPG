@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: procentric-epg
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: procentric-epg
+      app.kubernetes.io/part-of: procentric-epg
+
+resources:
+  - namespace.yaml
+  - secret-sftpgo-admin.yaml
+  - pvc-bundles.yaml
+  - pvc-sftpgo-data.yaml
+  - deployment-epg-generator.yaml
+  - deployment-ftp-server.yaml
+  - deployment-epg-admin.yaml
+  - service-ftp-server.yaml
+  - service-ftp-server-metrics.yaml
+  - service-epg-admin.yaml

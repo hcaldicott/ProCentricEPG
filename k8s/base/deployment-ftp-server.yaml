@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ftp-server
+  namespace: procentric-epg
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: ftp-server
+  template:
+    metadata:
+      labels:
+        app: ftp-server
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: init-sftpgo-data
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /var/lib/sftpgo/backups
+              touch /var/lib/sftpgo/sftpgo.db
+              chmod -R 0775 /var/lib/sftpgo
+              if [ ! -s /var/lib/sftpgo/signing_passphrase ]; then
+                tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 >/var/lib/sftpgo/signing_passphrase
+              fi
+              chown 1000:1000 /var/lib/sftpgo/signing_passphrase
+              chmod 640 /var/lib/sftpgo/signing_passphrase
+          volumeMounts:
+            - name: sftpgo-data
+              mountPath: /var/lib/sftpgo
+      containers:
+        - name: ftp-server
+          image: drakkan/sftpgo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ftp-control
+              containerPort: 21
+            - name: admin-http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 10000
+            - name: ftp-pasv-21100
+              containerPort: 21100
+            - name: ftp-pasv-21101
+              containerPort: 21101
+            - name: ftp-pasv-21102
+              containerPort: 21102
+            - name: ftp-pasv-21103
+              containerPort: 21103
+            - name: ftp-pasv-21104
+              containerPort: 21104
+            - name: ftp-pasv-21105
+              containerPort: 21105
+            - name: ftp-pasv-21106
+              containerPort: 21106
+            - name: ftp-pasv-21107
+              containerPort: 21107
+            - name: ftp-pasv-21108
+              containerPort: 21108
+            - name: ftp-pasv-21109
+              containerPort: 21109
+            - name: ftp-pasv-21110
+              containerPort: 21110
+          startupProbe:
+            exec:
+              command:
+                - sftpgo
+                - ping
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command:
+                - sftpgo
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - sftpgo
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          env:
+            - name: SFTPGO_FTPD__BINDINGS__0__PORT
+              value: "21"
+            - name: SFTPGO_FTPD__BINDINGS__0__ADDRESS
+              value: "0.0.0.0"
+            - name: SFTPGO_FTPD__DISABLE_ACTIVE_MODE
+              value: "0"
+            - name: SFTPGO_FTPD__PASSIVE_PORT_RANGE__START
+              value: "21100"
+            - name: SFTPGO_FTPD__PASSIVE_PORT_RANGE__END
+              value: "21110"
+            - name: SFTPGO_FTPD__BINDINGS__0__FORCE_PASSIVE_IP
+              value: "127.0.0.1"
+            - name: SFTPGO_HTTPD__BINDINGS__0__PORT
+              value: "8080"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ADDRESS
+              value: "0.0.0.0"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_ADMIN
+              value: "0"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_REST_API
+              value: "1"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_CLIENT
+              value: "0"
+            - name: SFTPGO_HTTPD__BINDINGS__0__RENDER_OPENAPI
+              value: "0"
+            - name: SFTPGO_HTTPD__TOKEN_VALIDATION
+              value: "1"
+            - name: SFTPGO_HTTPD__BINDINGS__0__BRANDING__WEB_ADMIN__NAME
+              value: "ProCentric EPG Generator WebAdmin"
+            - name: SFTPGO_HTTPD__BINDINGS__0__BRANDING__WEB_ADMIN__SHORT_NAME
+              value: "EPG WebAdmin"
+            - name: SFTPGO_HTTPD__SIGNING_PASSPHRASE_FILE
+              value: "/var/lib/sftpgo/signing_passphrase"
+            - name: SFTPGO_SFTPD__BINDINGS__0__PORT
+              value: "0"
+            - name: SFTPGO_WEBDAVD__BINDINGS__0__PORT
+              value: "0"
+            - name: SFTPGO_TELEMETRY__BIND_PORT
+              value: "10000"
+            - name: SFTPGO_TELEMETRY__BIND_ADDRESS
+              value: "0.0.0.0"
+            - name: SFTPGO_DATA_PROVIDER__NAME
+              value: "/var/lib/sftpgo/sftpgo.db"
+            - name: SFTPGO_DATA_PROVIDER__BACKUPS_PATH
+              value: "/var/lib/sftpgo/backups"
+            - name: SFTPGO_DEFAULT_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: username
+            - name: SFTPGO_DEFAULT_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: password
+            - name: SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN
+              value: "1"
+          volumeMounts:
+            - name: bundles
+              mountPath: /srv/epg
+              readOnly: true
+            - name: sftpgo-data
+              mountPath: /var/lib/sftpgo
+      volumes:
+        - name: bundles
+          persistentVolumeClaim:
+            claimName: epg-bundles
+        - name: sftpgo-data
+          persistentVolumeClaim:
+            claimName: sftpgo-data

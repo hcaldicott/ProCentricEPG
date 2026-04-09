@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epg-generator
+  namespace: procentric-epg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: epg-generator
+  template:
+    metadata:
+      labels:
+        app: epg-generator
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ftp-server
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: epg-generator
+          image: procentric-epg-generator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CRON_SCHEDULE
+              value: "0 0 * * *"
+            - name: TZ
+              value: "UTC"
+            - name: OUTPUT_DIR
+              value: "/bundles"
+            - name: LOG_LEVEL
+              value: "INFO"
+          volumeMounts:
+            - name: bundles
+              mountPath: /bundles
+      volumes:
+        - name: bundles
+          persistentVolumeClaim:
+            claimName: epg-bundles

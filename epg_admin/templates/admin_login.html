@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPG Admin Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+</head>
+<body>
+  <main class="container container-narrow">
+    <h2>EPG Admin</h2>
+    <p>Sign in with an existing SFTPGo admin account.</p>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('admin_login') }}">
+      <label>Username</label>
+      <input type="text" name="username" required autocomplete="username" />
+      <label>Password</label>
+      <input type="password" name="password" required autocomplete="current-password" />
+      <button type="submit" class="btn btn-primary">Sign In</button>
+    </form>
+  </main>
+</body>
+</html>

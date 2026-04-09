@@ -1,0 +1,61 @@
+# Example output from ./epg_generator/run_local.sh
+
+$ ./epg_generator/run_local.sh
+
+[INFO] ═══════════════════════════════════════════════════════
+[INFO]   ProCentric EPG Generator - Local Testing
+[INFO] ═══════════════════════════════════════════════════════
+
+[SUCCESS] Found Python 3.11.5
+[INFO] Virtual environment already exists
+[INFO] Activating virtual environment...
+[INFO] Installing dependencies...
+[SUCCESS] Dependencies installed
+[INFO] Setting up output directories...
+[SUCCESS] Output directories created
+
+[INFO] Starting EPG generation...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2025-01-08 14:23:15 - root - INFO - Fetching and parsing the XML data for New Zealand...
+2025-01-08 14:23:15 - root - INFO - Fetching data for date: 2025-01-08
+2025-01-08 14:23:18 - root - INFO - Fetching data for date: 2025-01-09
+2025-01-08 14:23:21 - root - INFO - Fetching data for date: 2025-01-10
+2025-01-08 14:23:24 - root - INFO - JSON saved: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/NZL/Procentric_EPG.json
+2025-01-08 14:23:24 - root - INFO - ZIP created: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/NZL/Procentric_EPG_NZL_20250108.zip
+2025-01-08 14:23:24 - root - INFO - Deleted JSON file: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/NZL/Procentric_EPG.json
+2025-01-08 14:23:24 - root - INFO - Fetching and parsing the XML data for 'Pro:Centric JSON Program Guide Data AUS Sydney'...
+2025-01-08 14:23:24 - root - INFO - Fetching XML data from https://xmltv.net/xml_files/Sydney.xml...
+2025-01-08 14:23:27 - root - INFO - Parsing the XML data for Pro:Centric JSON Program Guide Data AUS Sydney...
+2025-01-08 14:23:28 - root - INFO - Successfully fetched and parsed the XML data for 'Pro:Centric JSON Program Guide Data AUS Sydney'.
+2025-01-08 14:23:28 - root - INFO - JSON saved: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/AUS/SYD/Procentric_EPG.json
+2025-01-08 14:23:28 - root - INFO - ZIP created: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/AUS/SYD/Procentric_EPG_SYD_20250108.zip
+2025-01-08 14:23:28 - root - INFO - Deleted JSON file: /Users/harrison/ProCentricEPG/epg_generator/output/EPG/AUS/SYD/Procentric_EPG.json
+2025-01-08 14:23:28 - root - INFO - Data for 'Pro:Centric JSON Program Guide Data AUS Sydney' has been saved and zipped successfully.
+[... continues for other cities ...]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[SUCCESS] EPG generation completed successfully!
+
+[INFO] Generated bundles:
+
+  📦 epg_generator/output/EPG/NZL/Procentric_EPG_NZL_20250108.zip (1.2M)
+  📦 epg_generator/output/EPG/AUS/SYD/Procentric_EPG_SYD_20250108.zip (856K)
+  📦 epg_generator/output/EPG/AUS/BNE/Procentric_EPG_BNE_20250108.zip (782K)
+  📦 epg_generator/output/EPG/AUS/ADL/Procentric_EPG_ADL_20250108.zip (654K)
+  📦 epg_generator/output/EPG/AUS/OOL/Procentric_EPG_OOL_20250108.zip (512K)
+  📦 epg_generator/output/EPG/AUS/MEL/Procentric_EPG_MEL_20250108.zip (891K)
+
+[SUCCESS] Total bundles created: 6
+
+[INFO] ═══════════════════════════════════════════════════════
+[SUCCESS] All done!
+[INFO] ═══════════════════════════════════════════════════════
+
+[INFO] Next steps:
+[INFO]   • Check bundles in: ./epg_generator/output/EPG/
+[INFO]   • View debug data in: ./debug/
+[INFO]   • Run again: ./epg_generator/run_local.sh
+[INFO]   • Clean and run: ./epg_generator/run_local.sh --clean
