@@ -7,14 +7,14 @@
       "component": "epg-generator",
       "package-name": "epg-generator",
       "include-v-in-tag": true,
-      "changelog-path": "epg_generator/CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md"
     },
     "epg_admin": {
       "release-type": "simple",
       "component": "epg-admin",
       "package-name": "epg-admin",
       "include-v-in-tag": true,
-      "changelog-path": "epg_admin/CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
