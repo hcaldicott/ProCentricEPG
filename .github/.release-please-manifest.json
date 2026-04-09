@@ -1,4 +1,9 @@
 {
+<<<<<<< release-please--branches--main--components--epg-admin
   "epg_generator": "2.0.0",
   "epg_admin": "1.0.1"
+=======
+  "epg_generator": "2.0.1",
+  "epg_admin": "1.0.0"
+>>>>>>> main
 }
