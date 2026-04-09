@@ -434,6 +434,10 @@ LOG_LEVEL=DEBUG ./epg_generator/run_local.sh
 cat epg_generator/debug/debug_skynz.json
 ```
 
+## Acknowledgements
+
+Thanks to [garethcheyne](https://github.com/garethcheyne) for the original code that helped shape the evolution of this project.
+
 ## Contributing
 
 Contributions welcome! Areas for improvement:
