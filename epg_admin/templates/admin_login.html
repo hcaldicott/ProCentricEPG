@@ -4,20 +4,42 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EPG Admin Login</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
 </head>
 <body>
-  <main class="container container-narrow">
-    <h2>EPG Admin</h2>
-    <p>Sign in with an existing SFTPGo admin account.</p>
-    {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <form method="post" action="{{ url_for('admin_login') }}">
-      <label>Username</label>
-      <input type="text" name="username" required autocomplete="username" />
-      <label>Password</label>
-      <input type="password" name="password" required autocomplete="current-password" />
-      <button type="submit" class="btn btn-primary">Sign In</button>
-    </form>
-  </main>
+  <section class="section">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column is-5-desktop is-7-tablet">
+          <div class="box">
+            <h1 class="title is-3 mb-2">EPG Admin</h1>
+            <p class="subtitle is-6 mb-5">Sign in with an existing admin account.</p>
+            {% if error %}
+            <div class="notification is-danger is-light">{{ error }}</div>
+            {% endif %}
+            <form method="post" action="{{ url_for('admin_login') }}">
+              <div class="field">
+                <label class="label">Username</label>
+                <div class="control">
+                  <input class="input" type="text" name="username" required autocomplete="username" />
+                </div>
+              </div>
+              <div class="field">
+                <label class="label">Password</label>
+                <div class="control">
+                  <input class="input" type="password" name="password" required autocomplete="current-password" />
+                </div>
+              </div>
+              <div class="field mt-5">
+                <div class="control">
+                  <button type="submit" class="button is-primary is-fullwidth">Sign In</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </body>
 </html>

@@ -4,58 +4,145 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EPG Admin Users</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma-toast.css') }}" />
 </head>
 <body>
-  <main class="container">
-    <div class="top">
-      <h2>EPG Admin</h2>
-      <div class="top-actions">
-        <a class="btn btn-primary" href="{{ url_for('admin_create_user') }}">Create Customer</a>
-        <form class="inline" method="post" action="{{ url_for('admin_logout') }}">
-          <button class="btn btn-secondary" type="submit">Logout</button>
-        </form>
+  <section class="section">
+    <div class="container is-max-widescreen">
+      <div class="level mb-4">
+        <div class="level-left">
+          <div class="level-item">
+            <h1 class="title is-3">EPG Admin</h1>
+          </div>
+        </div>
+        <div class="level-right">
+          <div class="level-item">
+            <a class="button is-primary" href="{{ url_for('admin_create_user') }}">Create Customer</a>
+          </div>
+          <div class="level-item">
+            <form method="post" action="{{ url_for('admin_logout') }}">
+              <button class="button is-light" type="submit">Logout</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <p class="mb-3">Signed in as <strong>{{ admin_username }}</strong>. Last refresh: {{ refreshed_at }}</p>
+      {% if error %}
+      <div class="notification is-danger is-light">{{ error }}</div>
+      {% endif %}
+
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Description</th>
+              <th class="has-text-centered">Status</th>
+              <th>Last Login</th>
+              <th class="has-text-centered">Stale</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr>
+              <td>{{ u.username }}</td>
+              <td>{{ u.label }}</td>
+              <td class="has-text-centered">
+                <form method="post" action="{{ url_for('admin_set_user_status', username=u.username) }}" class="status-toggle-form" data-username="{{ u.username }}">
+                  {% if u.enabled %}
+                  <input type="hidden" name="enabled" value="0" />
+                  <button
+                    class="button is-small is-success is-text"
+                    type="submit"
+                  >enabled</button>
+                  {% else %}
+                  <input type="hidden" name="enabled" value="1" />
+                  <button
+                    class="button is-small is-danger is-text"
+                    type="submit"
+                  >disabled</button>
+                  {% endif %}
+                </form>
+              </td>
+              <td>{{ u.last_login }}</td>
+              <td class="has-text-centered">
+                <div class="is-flex is-justify-content-center">
+                  {% if u.last_login == "Never" %}
+                  <span class="tag is-dark">N/A</span>
+                  {% elif u.stale %}
+                  <span class="tag is-warning">Stale</span>
+                  {% else %}
+                  <span class="tag is-success">Current</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="buttons are-small">
+                  <a class="button is-small is-info is-light" href="{{ url_for('admin_change_password', username=u.username) }}">Change Password</a>
+                  <a class="button is-small is-link is-light" href="{{ url_for('admin_user_ip_whitelist', username=u.username) }}">IP Whitelist</a>
+                  <form method="post" action="{{ url_for('admin_delete_user', username=u.username) }}" class="delete-user-form" data-username="{{ u.username }}">
+                    <button class="button is-small is-danger is-light" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
+  </section>
+  {% if flashes %}
+  {% for category, message in flashes %}
+  <div
+    class="notification is-light toast-corner flash-toast {% if category == 'danger' %}is-danger{% elif category == 'warning' %}is-warning{% elif category == 'info' %}is-info{% else %}is-success{% endif %}"
+    role="status"
+    aria-live="polite"
+  >
+    <button class="delete flash-toast-close" type="button" aria-label="Dismiss"></button>
+    <span>{{ message }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
 
-    <p>Signed in as <strong>{{ admin_username }}</strong>. Last refresh: {{ refreshed_at }}</p>
-    {% if notice %}<p class="ok">{{ notice }}</p>{% endif %}
-    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <script src="{{ url_for('static', filename='js/toast-tools.js') }}"></script>
+  <script>
+    (function () {
+      const forms = document.querySelectorAll(".status-toggle-form");
+      forms.forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+          const username = form.getAttribute("data-username") || "this user";
+          const enabledInput = form.querySelector("input[name='enabled']");
+          const enabling = enabledInput && enabledInput.value === "1";
+          const message = enabling
+            ? ("Enable user " + username + "?")
+            : ("Disable user " + username + "?");
+          if (!window.confirm(message)) {
+            event.preventDefault();
+          }
+        });
+      });
 
-    <table>
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Label</th>
-          <th>Status</th>
-          <th>Last Login</th>
-          <th>Stale</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        <tr>
-          <td>{{ u.username }}</td>
-          <td>{{ u.label }}</td>
-          <td>{{ u.status }}</td>
-          <td>{{ u.last_login }}</td>
-          <td class="{{ 'warn' if u.stale else 'ok' }}">{{ 'Yes' if u.stale else 'No' }}</td>
-          <td>
-            {% if u.enabled %}
-            <form class="inline" method="post" action="{{ url_for('admin_disable_user', username=u.username) }}">
-              <button class="btn btn-danger" type="submit">Disable</button>
-            </form>
-            {% endif %}
-            <form class="inline" method="post" action="{{ url_for('admin_reset_password', username=u.username) }}">
-              <input class="reset-password-input" name="new_password" placeholder="New password" />
-              <button class="btn btn-secondary" type="submit">Reset Password</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </main>
+      const deleteForms = document.querySelectorAll(".delete-user-form");
+      deleteForms.forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+          const username = form.getAttribute("data-username") || "this user";
+          const message = "Delete user " + username + "? This cannot be undone.";
+          if (!window.confirm(message)) {
+            event.preventDefault();
+          }
+        });
+      });
+
+      if (window.EPGToast) {
+        window.EPGToast.initStackedToasts(".flash-toast", {
+          closeSelector: ".flash-toast-close",
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

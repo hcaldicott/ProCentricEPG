@@ -20,7 +20,9 @@ Primary routes:
 - ``GET /admin/users``: list users and staleness.
 - ``GET|POST /admin/users/create``: create user with managed defaults.
 - ``POST /admin/users/<username>/disable``: disable account.
-- ``POST /admin/users/<username>/reset-password``: update account password.
+- ``POST /admin/users/<username>/status``: enable/disable account.
+- ``POST /admin/users/<username>/delete``: permanently delete account.
+- ``GET|POST /admin/users/<username>/change-password``: change user password.
 
 Key environment variables:
 - ``SFTPGO_API_BASE_URL``: base URL for SFTPGo Admin API v2.
@@ -34,6 +36,7 @@ Key environment variables:
 """
 
 import base64
+import ipaddress
 import json
 import os
 import secrets
@@ -46,7 +49,17 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from flask import Flask, Response, make_response, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    flash,
+    get_flashed_messages,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from prometheus_client import CollectorRegistry, Gauge, generate_latest
 from waitress import serve
 
@@ -220,6 +233,10 @@ class SFTPGoClient:
         """Update an existing user via ``PUT /users/<username>``."""
         self._request_json("PUT", f"/users/{username}", payload=user_payload)
 
+    def delete_user(self, username: str) -> None:
+        """Delete a user via ``DELETE /users/<username>``."""
+        self._request_json("DELETE", f"/users/{username}")
+
     def get_group(self, name: str) -> Optional[dict]:
         """Fetch a group by name, returning ``None`` when not found."""
         return self._request_json("GET", f"/groups/{name}", allow_404=True)
@@ -378,6 +395,7 @@ def create_app() -> Flask:
         template_folder="../templates",
         static_folder="../static",
     )
+    app.secret_key = os.getenv("EPG_ADMIN_FLASK_SECRET_KEY", "set-epg-admin-flask-secret")
 
     sessions: Dict[str, AdminSession] = {}
     session_lock = Lock()
@@ -482,7 +500,7 @@ def create_app() -> Flask:
             ts = float(last_login_ms) / 1000.0
             age = max(0.0, time.time() - ts)
             return now_utc_iso(ts), age > stale_after_seconds
-        return "Never", True
+        return "Never", False
 
     def build_user_rows(raw_users: List[dict]) -> List[dict]:
         """Transform raw SFTPGo users into table rows for the admin UI."""
@@ -565,7 +583,7 @@ def create_app() -> Flask:
         )
         g_stale = Gauge(
             "sftpgo_user_stale",
-            "1 when enabled user has not logged in within STALE_AFTER_HOURS, else 0",
+            "1 when enabled user last login is older than STALE_AFTER_HOURS, else 0",
             ["username", "customer_label", "status"],
             registry=registry,
         )
@@ -583,7 +601,7 @@ def create_app() -> Flask:
             if snap.status != "enabled":
                 stale = 0
             elif age_seconds < 0:
-                stale = 1
+                stale = 0
             else:
                 stale = 1 if age_seconds > stale_after_seconds else 0
 
@@ -658,9 +676,9 @@ def create_app() -> Flask:
         if session is None:
             return redirect(url_for("admin_login"))
 
-        notice = request.args.get("notice", "")
         error = ""
         rows: List[dict] = []
+        flashes = get_flashed_messages(with_categories=True)
         try:
             client = build_ui_client(session)
             rows = build_user_rows(client.fetch_users())
@@ -671,7 +689,7 @@ def create_app() -> Flask:
             "admin_users.html",
             admin_username=session.username,
             users=rows,
-            notice=notice,
+            flashes=flashes,
             error=error,
             refreshed_at=now_utc_iso(),
         )
@@ -685,21 +703,16 @@ def create_app() -> Flask:
             return redirect(url_for("admin_login"))
 
         error = ""
-        created_password = ""
 
         if request.method == "POST":
             username = request.form.get("username", "").strip()
             label = request.form.get("label", "").strip()
             password = request.form.get("password", "")
-            auto_generate = request.form.get("auto_generate_password", "") == "1"
 
-            if not username or not label:
-                error = "Username and customer label are required"
-            else:
-                if auto_generate:
-                    password = secrets.token_urlsafe(18)
-                if not password:
-                    error = "Password is required unless auto-generate is selected"
+            if not username:
+                error = "Username is required"
+            elif not password:
+                error = "Password is required"
 
             if not error:
                 try:
@@ -723,15 +736,14 @@ def create_app() -> Flask:
                         ],
                     }
                     client.create_user(payload)
-                    created_password = password if auto_generate else ""
-                    if not auto_generate:
-                        return redirect(url_for("admin_users", notice=f"Created user {username}"))
+                    flash(f"Created user {username}", "success")
+                    return redirect(url_for("admin_users"))
                 except HTTPError as exc:
                     error = f"Failed to create user: HTTP {exc.code}"
                 except (URLError, ValueError, OSError) as exc:
                     error = f"Failed to create user: {exc}"
 
-        html = render_template("admin_create_user.html", error=error, created_password=created_password)
+        html = render_template("admin_create_user.html", error=error)
         return Response(html, mimetype="text/html")
 
     @app.post("/admin/users/<username>/disable")
@@ -745,40 +757,210 @@ def create_app() -> Flask:
             client = build_ui_client(session)
             user = client.get_user(username)
             if user is None:
-                return redirect(url_for("admin_users", notice=f"User {username} not found"))
+                flash(f"User {username} not found", "warning")
+                return redirect(url_for("admin_users"))
             payload = sanitize_user_for_update(user)
             payload["status"] = 0
             client.update_user(username, payload)
-            return redirect(url_for("admin_users", notice=f"Disabled user {username}"))
+            flash(f"Disabled user {username}", "success")
+            return redirect(url_for("admin_users"))
         except HTTPError as exc:
-            return redirect(url_for("admin_users", notice=f"Failed to disable {username}: HTTP {exc.code}"))
+            flash(f"Failed to disable {username}: HTTP {exc.code}", "danger")
+            return redirect(url_for("admin_users"))
         except (URLError, ValueError, OSError) as exc:
-            return redirect(url_for("admin_users", notice=f"Failed to disable {username}: {exc}"))
+            flash(f"Failed to disable {username}: {exc}", "danger")
+            return redirect(url_for("admin_users"))
 
-    @app.post("/admin/users/<username>/reset-password")
-    def admin_reset_password(username: str) -> Response:
-        """Reset password for the specified SFTPGo user account."""
+    @app.post("/admin/users/<username>/status")
+    def admin_set_user_status(username: str) -> Response:
+        """Set account status (enabled/disabled) for the specified SFTPGo user."""
         session = require_admin_session()
         if session is None:
             return redirect(url_for("admin_login"))
 
-        new_password = request.form.get("new_password", "")
-        if not new_password:
-            return redirect(url_for("admin_users", notice=f"New password required for {username}"))
+        enabled_value = request.form.get("enabled", "").strip().lower()
+        if enabled_value in {"1", "true", "enabled"}:
+            target_status = 1
+            action_label = "enabled"
+        elif enabled_value in {"0", "false", "disabled"}:
+            target_status = 0
+            action_label = "disabled"
+        else:
+            flash(f"Invalid status request for {username}", "warning")
+            return redirect(url_for("admin_users"))
 
         try:
             client = build_ui_client(session)
             user = client.get_user(username)
             if user is None:
-                return redirect(url_for("admin_users", notice=f"User {username} not found"))
+                flash(f"User {username} not found", "warning")
+                return redirect(url_for("admin_users"))
             payload = sanitize_user_for_update(user)
-            payload["password"] = new_password
+            payload["status"] = target_status
             client.update_user(username, payload)
-            return redirect(url_for("admin_users", notice=f"Password reset for {username}"))
+            flash(f"{action_label.capitalize()} user {username}", "success")
+            return redirect(url_for("admin_users"))
         except HTTPError as exc:
-            return redirect(url_for("admin_users", notice=f"Failed reset for {username}: HTTP {exc.code}"))
+            flash(f"Failed to update {username}: HTTP {exc.code}", "danger")
+            return redirect(url_for("admin_users"))
         except (URLError, ValueError, OSError) as exc:
-            return redirect(url_for("admin_users", notice=f"Failed reset for {username}: {exc}"))
+            flash(f"Failed to update {username}: {exc}", "danger")
+            return redirect(url_for("admin_users"))
+
+    @app.post("/admin/users/<username>/delete")
+    def admin_delete_user(username: str) -> Response:
+        """Delete the specified SFTPGo user account."""
+        session = require_admin_session()
+        if session is None:
+            return redirect(url_for("admin_login"))
+
+        try:
+            client = build_ui_client(session)
+            user = client.get_user(username)
+            if user is None:
+                flash(f"User {username} not found", "warning")
+                return redirect(url_for("admin_users"))
+            client.delete_user(username)
+            flash(f"Deleted user {username}", "success")
+            return redirect(url_for("admin_users"))
+        except HTTPError as exc:
+            flash(f"Failed to delete {username}: HTTP {exc.code}", "danger")
+            return redirect(url_for("admin_users"))
+        except (URLError, ValueError, OSError) as exc:
+            flash(f"Failed to delete {username}: {exc}", "danger")
+            return redirect(url_for("admin_users"))
+
+    @app.route("/admin/users/<username>/change-password", methods=["GET", "POST"])
+    @app.route("/admin/users/<username>/edit", methods=["GET", "POST"])
+    @app.route("/admin/users/<username>/reset-password", methods=["GET", "POST"])
+    def admin_change_password(username: str) -> Response:
+        """Change the specified SFTPGo user's password."""
+        session = require_admin_session()
+        if session is None:
+            return redirect(url_for("admin_login"))
+
+        error = ""
+        try:
+            client = build_ui_client(session)
+            user = client.get_user(username)
+            if user is None:
+                flash(f"User {username} not found", "warning")
+                return redirect(url_for("admin_users"))
+            if request.method == "POST":
+                new_password = request.form.get("new_password", "")
+                attempted_password_reset = bool(new_password)
+                if not attempted_password_reset:
+                    error = "Provide a new password"
+                else:
+                    payload = sanitize_user_for_update(user)
+                    payload["password"] = new_password
+                    client.update_user(username, payload)
+                    flash(f"Password reset for {username}", "success")
+                    return redirect(url_for("admin_users"))
+        except HTTPError as exc:
+            if request.method == "POST":
+                flash(f"Failed update for {username}: HTTP {exc.code}", "danger")
+                return redirect(url_for("admin_users"))
+            else:
+                flash(f"Failed to load {username}: HTTP {exc.code}", "danger")
+                return redirect(url_for("admin_users"))
+        except (URLError, ValueError, OSError) as exc:
+            if request.method == "POST":
+                flash(f"Failed update for {username}: {exc}", "danger")
+                return redirect(url_for("admin_users"))
+            else:
+                flash(f"Failed to load {username}: {exc}", "danger")
+                return redirect(url_for("admin_users"))
+
+        html = render_template(
+            "admin_reset_password.html",
+            username=username,
+            error=error,
+        )
+        return Response(html, mimetype="text/html")
+
+    @app.route("/admin/users/<username>/ip-whitelist", methods=["GET", "POST"])
+    def admin_user_ip_whitelist(username: str) -> Response:
+        """View or update per-user allowed IP/CIDR whitelist."""
+        session = require_admin_session()
+        if session is None:
+            return redirect(url_for("admin_login"))
+
+        error = ""
+        ip_whitelist_text = ""
+
+        try:
+            client = build_ui_client(session)
+            user = client.get_user(username)
+            if user is None:
+                flash(f"User {username} not found", "warning")
+                return redirect(url_for("admin_users"))
+        except HTTPError as exc:
+            flash(f"Failed to load {username}: HTTP {exc.code}", "danger")
+            return redirect(url_for("admin_users"))
+        except (URLError, ValueError, OSError) as exc:
+            flash(f"Failed to load {username}: {exc}", "danger")
+            return redirect(url_for("admin_users"))
+
+        if request.method == "POST":
+            raw_input = request.form.get("allowed_ips", "")
+            entries = [line.strip() for line in raw_input.replace(",", "\n").splitlines()]
+            allowed_ips = [entry for entry in entries if entry]
+
+            invalid_entries: List[str] = []
+            for entry in allowed_ips:
+                try:
+                    ipaddress.ip_network(entry, strict=False)
+                except ValueError:
+                    invalid_entries.append(entry)
+
+            if invalid_entries:
+                error = (
+                    "Invalid IP/CIDR entry: "
+                    + ", ".join(invalid_entries[:5])
+                    + ("..." if len(invalid_entries) > 5 else "")
+                )
+                ip_whitelist_text = raw_input
+            else:
+                try:
+                    payload = sanitize_user_for_update(user)
+                    filters = payload.get("filters")
+                    if not isinstance(filters, dict):
+                        filters = {}
+                    if allowed_ips:
+                        filters["allowed_ip"] = allowed_ips
+                    else:
+                        filters.pop("allowed_ip", None)
+                    payload["filters"] = filters
+                    client.update_user(username, payload)
+                    if allowed_ips:
+                        notice = f"Updated IP whitelist for {username} ({len(allowed_ips)} entries)"
+                    else:
+                        notice = f"Cleared IP whitelist for {username}"
+                    flash(notice, "success")
+                    return redirect(url_for("admin_users"))
+                except HTTPError as exc:
+                    error = f"Failed to update whitelist: HTTP {exc.code}"
+                    ip_whitelist_text = raw_input
+                except (URLError, ValueError, OSError) as exc:
+                    error = f"Failed to update whitelist: {exc}"
+                    ip_whitelist_text = raw_input
+        else:
+            filters = user.get("filters")
+            allowed_ip_values: List[str] = []
+            if isinstance(filters, dict):
+                raw_allowed = filters.get("allowed_ip")
+                if isinstance(raw_allowed, list):
+                    allowed_ip_values = [str(item).strip() for item in raw_allowed if str(item).strip()]
+            ip_whitelist_text = "\n".join(allowed_ip_values)
+
+        html = render_template(
+            "admin_user_ip_whitelist.html",
+            username=username,
+            error=error,
+            ip_whitelist_text=ip_whitelist_text,
+        )
+        return Response(html, mimetype="text/html")
 
     return app
 

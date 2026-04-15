@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IP Whitelist - {{ username }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
+</head>
+<body>
+  <div class="modal is-active" id="ip-whitelist-modal">
+    <a class="modal-background" href="{{ url_for('admin_users') }}" aria-label="Close"></a>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">IP Whitelist: {{ username }}</p>
+        <a href="{{ url_for('admin_users') }}" class="delete" aria-label="Close"></a>
+      </header>
+      <section class="modal-card-body">
+        {% if error %}
+        <div class="notification is-danger is-light">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('admin_user_ip_whitelist', username=username) }}" id="ip-whitelist-form">
+          <div class="field">
+            <label class="label">Allowed IPs / CIDRs</label>
+            <div class="control">
+              <textarea
+                class="textarea"
+                name="allowed_ips"
+                rows="8"
+                placeholder="One per line, e.g.&#10;203.0.113.10&#10;198.51.100.0/24"
+              >{{ ip_whitelist_text }}</textarea>
+            </div>
+            <p class="help">Only listed addresses can authenticate. Leave empty to disable whitelist restriction.</p>
+          </div>
+        </form>
+      </section>
+      <footer class="modal-card-foot">
+        <div class="buttons">
+          <button type="submit" form="ip-whitelist-form" class="button is-primary">Save Whitelist</button>
+          <a href="{{ url_for('admin_users') }}" class="button">Cancel</a>
+        </div>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

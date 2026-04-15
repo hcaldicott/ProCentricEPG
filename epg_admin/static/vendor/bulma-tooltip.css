@@ -1,0 +1,54 @@
+.tooltip-inline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+}
+
+.tooltip-trigger {
+  border: 0;
+  background: transparent;
+  color: var(--bulma-info);
+  padding: 0;
+  cursor: help;
+  line-height: 1;
+}
+
+.tooltip-bubble {
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 15rem;
+  max-width: 20rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--bulma-grey-darker);
+  color: var(--bulma-white);
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: 0 0.4rem 0.9rem rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+  z-index: 5;
+}
+
+.tooltip-bubble::before {
+  content: "";
+  position: absolute;
+  left: -0.35rem;
+  top: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  background: var(--bulma-grey-darker);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.tooltip-inline:hover .tooltip-bubble,
+.tooltip-inline:focus-within .tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+}
