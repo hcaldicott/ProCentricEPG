@@ -4,9 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Create Customer</title>
+  <script>
+    (function () {
+      const stored = window.localStorage.getItem("epgAdminTheme");
+      const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", stored || (dark ? "dark" : "light"));
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma-toast.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma-tooltip.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-theme.css') }}" />
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"

@@ -13,6 +13,7 @@ resources:
   - secret-sftpgo-admin.yaml
   - pvc-bundles.yaml
   - pvc-sftpgo-data.yaml
+  - pvc-epg-admin-state.yaml
   - deployment-epg-generator.yaml
   - deployment-ftp-server.yaml
   - deployment-epg-admin.yaml

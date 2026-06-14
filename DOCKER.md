@@ -351,6 +351,7 @@ services:
 Grafana setup files:
 - `grafana_templates/sftpgo-observability-dashboard.json` (dashboard import)
 - `grafana_templates/sftpgo-alert-rule.json` (Grafana alert provisioning API payload)
+- `grafana_templates/epg-bundle-freshness-alert-rule.json` (alerts when generated bundles are stale, missing, or incomplete)
 - `grafana_templates/import-alert-rule.sh` (imports alert rule and auto-resolves Prometheus datasource UID)
 
 Import the dashboard in Grafana:
@@ -364,6 +365,15 @@ Create the alert rule using helper script (recommended):
   --grafana-url http://localhost:3000 \
   --api-token <grafana-api-token> \
   --datasource-name Prometheus
+```
+
+Import the generated-bundle freshness alert the same way:
+```bash
+./grafana_templates/import-alert-rule.sh \
+  --grafana-url http://localhost:3000 \
+  --api-token <grafana-api-token> \
+  --datasource-name Prometheus \
+  --rule-file grafana_templates/epg-bundle-freshness-alert-rule.json
 ```
 
 Optional: manual API import if you want full control:

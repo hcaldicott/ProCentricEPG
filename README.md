@@ -190,13 +190,23 @@ Tracked per-user metrics include:
 - `sftpgo_user_last_login_timestamp`
 - `sftpgo_user_seconds_since_last_login`
 - `sftpgo_user_stale`
+- `sftpgo_user_last_successful_download_timestamp`
+- `sftpgo_user_download_stale`
+
+Generated bundle freshness metrics include:
+- `epg_bundle_generation_stale` - primary alert metric; `1` means generated bundles are stale, missing, or the bundle root cannot be scanned.
+- `epg_bundle_seconds_since_latest_modified` - age of the newest generated ZIP bundle.
+- `epg_bundle_file_count` / `epg_bundle_expected_file_count` / `epg_bundle_missing_expected_file_count` - visible bundle count checks.
 
 Important note:
-- Staleness is derived from SFTPGo user `last_login` via API.
-- Use one FTP account per customer for accurate alerting.
+- User download staleness is derived from SFTPGo download webhook events.
+- Bundle generation staleness is derived from ZIP files visible under the shared EPG bundle volume.
+- Use one FTP account per customer for accurate per-customer download alerting.
 
 Default alert timing:
-- Staleness threshold defaults to `24` hours via `STALE_AFTER_HOURS=24` in `epg-admin`.
+- User download staleness threshold defaults to `24` hours via `STALE_AFTER_HOURS=24` in `epg-admin`.
+- Bundle generation staleness threshold defaults to `48` hours via `EPG_BUNDLE_FRESHNESS_MAX_AGE_HOURS=48`.
+- Expected generated bundle count defaults to `52` via `EPG_BUNDLE_EXPECTED_COUNT=52`.
 - The bundled Grafana alert rule fires immediately when stale is detected (`"for": "0s"` in `grafana_templates/sftpgo-alert-rule.json`).
 - Effective default alert latency is approximately `24h` plus up to the exporter poll interval (default `60s`).
 
@@ -210,6 +220,7 @@ How to customize:
 Grafana assets:
 - `grafana_templates/sftpgo-observability-dashboard.json`
 - `grafana_templates/sftpgo-alert-rule.json`
+- `grafana_templates/epg-bundle-freshness-alert-rule.json`
 - `grafana_templates/import-alert-rule.sh` (helper script to import alert rule with datasource UID resolution)
 
 Quick Grafana setup:
@@ -223,6 +234,14 @@ Quick Grafana setup:
      --grafana-url http://localhost:3000 \
      --api-token <grafana-api-token> \
      --datasource-name Prometheus
+   ```
+   To import the bundle freshness alert too, pass the second rule file:
+   ```bash
+   ./grafana_templates/import-alert-rule.sh \
+     --grafana-url http://localhost:3000 \
+     --api-token <grafana-api-token> \
+     --datasource-name Prometheus \
+     --rule-file grafana_templates/epg-bundle-freshness-alert-rule.json
    ```
 
 ### LG ProCentric Configuration

@@ -4,8 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EPG Admin Users</title>
+  <script>
+    (function () {
+      const stored = window.localStorage.getItem("epgAdminTheme");
+      const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", stored || (dark ? "dark" : "light"));
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma-toast.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-theme.css') }}" />
 </head>
 <body>
   <section class="section">
@@ -18,30 +26,56 @@
         </div>
         <div class="level-right">
           <div class="level-item">
-            <a class="button is-primary" href="{{ url_for('admin_create_user') }}">Create Customer</a>
+            <button class="button is-small is-light epg-theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode" title="Switch to dark mode">
+              <span class="icon is-small" data-theme-icon data-current-icon="moon" aria-hidden="true">
+                <i data-lucide="moon"></i>
+              </span>
+            </button>
+          </div>
+          <div class="level-item">
+            <a class="button is-link is-light epg-icon-button" href="{{ url_for('admin_files') }}" aria-label="View EPG files" title="View EPG Files">
+              <span class="icon is-small" aria-hidden="true">
+                <i data-lucide="files"></i>
+              </span>
+              <span class="is-sr-only">View EPG Files</span>
+            </a>
+          </div>
+          <div class="level-item">
+            <a class="button is-primary epg-icon-button" href="{{ url_for('admin_create_user') }}" aria-label="Create customer" title="Create Customer">
+              <span class="icon is-small" aria-hidden="true">
+                <i data-lucide="user-plus"></i>
+              </span>
+              <span class="is-sr-only">Create Customer</span>
+            </a>
           </div>
           <div class="level-item">
             <form method="post" action="{{ url_for('admin_logout') }}">
-              <button class="button is-light" type="submit">Logout</button>
+              <button class="button is-light epg-icon-button" type="submit" aria-label="Sign out" title="Sign out">
+                <span class="icon is-small" aria-hidden="true">
+                  <i data-lucide="log-out"></i>
+                </span>
+                <span class="is-sr-only">Sign out</span>
+              </button>
             </form>
           </div>
         </div>
       </div>
 
-      <p class="mb-3">Signed in as <strong>{{ admin_username }}</strong>. Last refresh: {{ refreshed_at }}</p>
+      <p class="mb-3">Signed in as <strong>{{ admin_username }}</strong>. Last refresh: <time data-utc-timestamp="{{ refreshed_at }}">{{ refreshed_at }}</time></p>
       {% if error %}
       <div class="notification is-danger is-light">{{ error }}</div>
       {% endif %}
 
       <div class="table-container">
-        <table class="table is-fullwidth is-striped is-hoverable">
+        <table class="table is-fullwidth is-striped is-hoverable epg-users-table">
           <thead>
             <tr>
               <th>Username</th>
               <th>Description</th>
               <th class="has-text-centered">Status</th>
               <th>Last Login</th>
-              <th class="has-text-centered">Stale</th>
+              <th>Last Download</th>
+              <th>Last File</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -55,36 +89,70 @@
                   {% if u.enabled %}
                   <input type="hidden" name="enabled" value="0" />
                   <button
-                    class="button is-small is-success is-text"
+                    class="epg-user-status-chip epg-user-status-enabled"
                     type="submit"
+                    title="Disable user"
                   >enabled</button>
                   {% else %}
                   <input type="hidden" name="enabled" value="1" />
                   <button
-                    class="button is-small is-danger is-text"
+                    class="epg-user-status-chip epg-user-status-disabled"
                     type="submit"
+                    title="Enable user"
                   >disabled</button>
                   {% endif %}
                 </form>
               </td>
-              <td>{{ u.last_login }}</td>
-              <td class="has-text-centered">
-                <div class="is-flex is-justify-content-center">
-                  {% if u.last_login == "Never" %}
-                  <span class="tag is-dark">N/A</span>
-                  {% elif u.stale %}
-                  <span class="tag is-warning">Stale</span>
+              <td><time data-utc-timestamp="{{ u.last_login }}" title="Source: {{ u.last_login_source }}">{{ u.last_login }}</time></td>
+              <td><time data-utc-timestamp="{{ u.last_download }}" title="{{ u.last_download_path }}">{{ u.last_download }}</time></td>
+              <td title="{{ u.last_download_path }}">
+                <div class="epg-file-status">
+                  <span class="epg-file-name">{{ u.last_download_filename or "N/A" }}</span>
+                  {% if u.last_download == "Never" %}
+                  <span class="tag is-dark epg-download-status-tag">N/A</span>
+                  {% elif u.download_stale %}
+                  <span class="tag is-warning epg-download-status-tag">Stale</span>
                   {% else %}
-                  <span class="tag is-success">Current</span>
+                  <span class="tag epg-download-status-tag epg-download-status-current">Current</span>
                   {% endif %}
                 </div>
               </td>
               <td>
-                <div class="buttons are-small">
-                  <a class="button is-small is-info is-light" href="{{ url_for('admin_change_password', username=u.username) }}">Change Password</a>
-                  <a class="button is-small is-link is-light" href="{{ url_for('admin_user_ip_whitelist', username=u.username) }}">IP Whitelist</a>
-                  <form method="post" action="{{ url_for('admin_delete_user', username=u.username) }}" class="delete-user-form" data-username="{{ u.username }}">
-                    <button class="button is-small is-danger is-light" type="submit">Delete</button>
+                <div class="epg-actions">
+                  <a
+                    class="button is-small is-link is-light epg-icon-button"
+                    href="{{ url_for('admin_user_ip_whitelist', username=u.username) }}"
+                    aria-label="IP whitelist for {{ u.username }}"
+                    title="IP Whitelist"
+                  >
+                    <span class="icon is-small" aria-hidden="true">
+                      <i data-lucide="shield-check"></i>
+                    </span>
+                    <span class="is-sr-only">IP Whitelist</span>
+                  </a>
+                  <a
+                    class="button is-small is-info is-light epg-icon-button"
+                    href="{{ url_for('admin_change_password', username=u.username) }}"
+                    aria-label="Change password for {{ u.username }}"
+                    title="Change Password"
+                  >
+                    <span class="icon is-small" aria-hidden="true">
+                      <i data-lucide="key-round"></i>
+                    </span>
+                    <span class="is-sr-only">Change Password</span>
+                  </a>
+                  <form method="post" action="{{ url_for('admin_delete_user', username=u.username) }}" class="delete-user-form epg-action-form" data-username="{{ u.username }}">
+                    <button
+                      class="button is-small is-danger is-light epg-icon-button"
+                      type="submit"
+                      aria-label="Delete {{ u.username }}"
+                      title="Delete"
+                    >
+                      <span class="icon is-small" aria-hidden="true">
+                        <i data-lucide="trash-2"></i>
+                      </span>
+                      <span class="is-sr-only">Delete</span>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -109,6 +177,9 @@
   {% endif %}
 
   <script src="{{ url_for('static', filename='js/toast-tools.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/lucide.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/theme-tools.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/time-tools.js') }}"></script>
   <script>
     (function () {
       const forms = document.querySelectorAll(".status-toggle-form");
@@ -141,6 +212,10 @@
         window.EPGToast.initStackedToasts(".flash-toast", {
           closeSelector: ".flash-toast-close",
         });
+      }
+
+      if (window.lucide) {
+        window.lucide.createIcons();
       }
     })();
   </script>

@@ -44,8 +44,14 @@ fi
 # Set up cron job
 log "Setting up cron schedule: ${CRON_SCHEDULE}"
 
-# Create cron job file
-echo "${CRON_SCHEDULE} cd /app/src && ${PYTHON_BIN} main.py >> /proc/1/fd/1 2>&1" > /etc/cron.d/epg-cron
+# Create cron job file. Cron does not inherit the container environment, so
+# explicitly persist runtime settings needed by the generator.
+{
+    echo "OUTPUT_DIR=${OUTPUT_DIR:-output}"
+    echo "LOG_LEVEL=${LOG_LEVEL:-INFO}"
+    echo "TZ=${TZ:-UTC}"
+    echo "${CRON_SCHEDULE} cd /app/src && ${PYTHON_BIN} main.py >> /proc/1/fd/1 2>&1"
+} > /etc/cron.d/epg-cron
 
 # Give execution rights on the cron job
 chmod 0644 /etc/cron.d/epg-cron

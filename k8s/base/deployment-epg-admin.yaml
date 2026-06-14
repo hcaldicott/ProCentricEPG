@@ -84,3 +84,24 @@ spec:
               value: "http://ftp-server-metrics:10000/metrics"
             - name: EPG_ADMIN_MANAGED_FOLDER_PATH
               value: "/srv/epg/EPG"
+            - name: EPG_BUNDLE_ROOT
+              value: "/srv/epg/EPG"
+            - name: EPG_BUNDLE_EXPECTED_COUNT
+              value: "52"
+            - name: EPG_BUNDLE_FRESHNESS_MAX_AGE_HOURS
+              value: "48"
+            - name: EPG_ADMIN_EVENT_STATE_PATH
+              value: "/var/lib/epg-admin/sftpgo-events.json"
+          volumeMounts:
+            - name: bundles
+              mountPath: /srv/epg
+              readOnly: true
+            - name: epg-admin-state
+              mountPath: /var/lib/epg-admin
+      volumes:
+        - name: bundles
+          persistentVolumeClaim:
+            claimName: epg-bundles
+        - name: epg-admin-state
+          persistentVolumeClaim:
+            claimName: epg-admin-state

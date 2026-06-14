@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPG Files</title>
+  <script>
+    (function () {
+      const stored = window.localStorage.getItem("epgAdminTheme");
+      const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", stored || (dark ? "dark" : "light"));
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bulma.min.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-theme.css') }}" />
+</head>
+<body>
+  <section class="section">
+    <div class="container is-max-widescreen">
+      <div class="level mb-4">
+        <div class="level-left">
+          <div class="level-item">
+            <h1 class="title is-3">EPG Files</h1>
+          </div>
+        </div>
+        <div class="level-right">
+          <div class="level-item">
+            <button class="button is-small is-light epg-theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode" title="Switch to dark mode">
+              <span class="icon is-small" data-theme-icon data-current-icon="moon" aria-hidden="true">
+                <i data-lucide="moon"></i>
+              </span>
+            </button>
+          </div>
+          <div class="level-item">
+            <a class="button is-light" href="{{ url_for('admin_users') }}">Back to Users</a>
+          </div>
+        </div>
+      </div>
+
+      <p class="mb-3">Signed in as <strong>{{ admin_username }}</strong>. Last refresh: <time data-utc-timestamp="{{ refreshed_at }}">{{ refreshed_at }}</time></p>
+      <p class="mb-3">Root: <code>{{ files_root }}</code></p>
+      {% if error %}
+      <div class="notification is-danger is-light">{{ error }}</div>
+      {% endif %}
+      {% if truncated %}
+      <div class="notification is-warning is-light">
+        Showing first {{ files|length }} files (limit reached).
+      </div>
+      {% endif %}
+
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable is-narrow">
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Size</th>
+              <th>Last Modified</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in files %}
+            <tr>
+              <td><code>{{ f.path }}</code></td>
+              <td>{{ f.size_label }}</td>
+              <td><time data-utc-timestamp="{{ f.modified }}">{{ f.modified }}</time></td>
+            </tr>
+            {% endfor %}
+            {% if not files and not error %}
+            <tr>
+              <td colspan="3" class="has-text-grey">No files found.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  <script src="{{ url_for('static', filename='vendor/lucide.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/theme-tools.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/time-tools.js') }}"></script>
+</body>
+</html>

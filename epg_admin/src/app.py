@@ -18,6 +18,7 @@ Primary routes:
 - ``GET|POST /admin/login``: login with SFTPGo admin credentials.
 - ``POST /admin/logout``: revoke local in-memory session.
 - ``GET /admin/users``: list users and staleness.
+- ``GET /admin/files``: list files currently stored under the shared EPG root.
 - ``GET|POST /admin/users/create``: create user with managed defaults.
 - ``POST /admin/users/<username>/disable``: disable account.
 - ``POST /admin/users/<username>/status``: enable/disable account.
@@ -33,6 +34,8 @@ Key environment variables:
 - ``EPG_ADMIN_SESSION_*``: cookie name and session lifetime.
 - ``EPG_ADMIN_MANAGED_*``: managed folder/group/virtual path defaults used when
   provisioning new customer users.
+- ``EPG_BUNDLE_*``: generated bundle freshness/count checks exported as
+  ``epg_bundle_*`` metrics.
 """
 
 import base64
@@ -40,6 +43,7 @@ import ipaddress
 import json
 import os
 import secrets
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -71,6 +75,7 @@ class UserSnapshot:
     username: str
     status: str
     last_login_ts: float
+    last_download_ts: float
 
 
 @dataclass
@@ -83,11 +88,65 @@ class AdminSession:
     expires_at: float
 
 
+@dataclass
+class DownloadSnapshot:
+    """Latest successful download metadata for a customer user."""
+
+    username: str
+    last_download_ts: float
+    filename: str
+    file_path: str
+    virtual_path: str
+    file_size: int
+    protocol: str
+    ip: str
+    successful_downloads: int
+
+
+@dataclass
+class LoginSnapshot:
+    """Latest successful login metadata for a customer user."""
+
+    username: str
+    last_login_ts: float
+    method: str
+    protocol: str
+    ip: str
+    successful_logins: int
+
+
 def now_utc_iso(ts: Optional[float] = None) -> str:
     """Format timestamp for human-readable UTC display."""
     if ts is None:
         ts = time.time()
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def parse_sftpgo_event_timestamp(value: Any) -> float:
+    """Convert SFTPGo event timestamps to Unix seconds."""
+    if not isinstance(value, (int, float)):
+        return 0.0
+    ts = float(value)
+    if ts <= 0:
+        return 0.0
+    if ts > 1_000_000_000_000_000:
+        return ts / 1_000_000_000.0
+    if ts > 1_000_000_000_000:
+        return ts / 1000.0
+    return ts
+
+
+def int_or_default(value: Any, default: int = 0) -> int:
+    """Convert a value to int, returning a default for invalid input."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def download_filename(file_path: str, virtual_path: str) -> str:
+    """Return the basename for a downloaded file using virtual path first."""
+    return os.path.basename(virtual_path or file_path)
 
 
 class SFTPGoClient:
@@ -260,12 +319,216 @@ class SFTPGoClient:
         return created
 
 
+class SFTPGoEventStore:
+    """Persistent latest successful login/download state keyed by SFTPGo username."""
+
+    def __init__(self, state_path: str):
+        self.state_path = state_path
+        self._lock = Lock()
+        self._logins: Dict[str, LoginSnapshot] = {}
+        self._downloads: Dict[str, DownloadSnapshot] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Load persisted event state if present."""
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+        except FileNotFoundError:
+            return
+        except (json.JSONDecodeError, OSError):
+            return
+
+        if not isinstance(raw, dict):
+            return
+
+        raw_users = raw.get("users", {})
+        if not isinstance(raw_users, dict):
+            return
+
+        logins: Dict[str, LoginSnapshot] = {}
+        downloads: Dict[str, DownloadSnapshot] = {}
+        for username, item in raw_users.items():
+            if not isinstance(username, str) or not isinstance(item, dict):
+                continue
+
+            login_item = item.get("login")
+            if isinstance(login_item, dict):
+                last_login_ts = float(login_item.get("last_login_ts", 0.0) or 0.0)
+                if last_login_ts > 0:
+                    logins[username] = LoginSnapshot(
+                        username=username,
+                        last_login_ts=last_login_ts,
+                        method=str(login_item.get("method", "") or ""),
+                        protocol=str(login_item.get("protocol", "") or ""),
+                        ip=str(login_item.get("ip", "") or ""),
+                        successful_logins=int_or_default(login_item.get("successful_logins", 0)),
+                    )
+
+            download_item = item.get("download")
+            if not isinstance(download_item, dict):
+                download_item = item
+            last_download_ts = float(download_item.get("last_download_ts", 0.0) or 0.0)
+            if last_download_ts <= 0:
+                continue
+            file_path = str(download_item.get("file_path", "") or "")
+            virtual_path = str(download_item.get("virtual_path", "") or "")
+            filename = str(download_item.get("filename", "") or "") or download_filename(file_path, virtual_path)
+            downloads[username] = DownloadSnapshot(
+                username=username,
+                last_download_ts=last_download_ts,
+                filename=filename,
+                file_path=file_path,
+                virtual_path=virtual_path,
+                file_size=int_or_default(download_item.get("file_size", 0)),
+                protocol=str(download_item.get("protocol", "") or ""),
+                ip=str(download_item.get("ip", "") or ""),
+                successful_downloads=int_or_default(download_item.get("successful_downloads", 0)),
+            )
+
+        self._logins = logins
+        self._downloads = downloads
+
+    def _save_locked(self) -> None:
+        """Persist current state to disk using atomic replace semantics."""
+        directory = os.path.dirname(self.state_path) or "."
+        os.makedirs(directory, exist_ok=True)
+        users: Dict[str, Dict[str, Any]] = {}
+        for username, snap in sorted(self._logins.items()):
+            users.setdefault(username, {})["login"] = {
+                "last_login_ts": snap.last_login_ts,
+                "method": snap.method,
+                "protocol": snap.protocol,
+                "ip": snap.ip,
+                "successful_logins": snap.successful_logins,
+            }
+        for username, snap in sorted(self._downloads.items()):
+            users.setdefault(username, {})["download"] = {
+                "last_download_ts": snap.last_download_ts,
+                "filename": snap.filename,
+                "file_path": snap.file_path,
+                "virtual_path": snap.virtual_path,
+                "file_size": snap.file_size,
+                "protocol": snap.protocol,
+                "ip": snap.ip,
+                "successful_downloads": snap.successful_downloads,
+            }
+
+        payload = {
+            "updated_at": now_utc_iso(),
+            "users": users,
+        }
+        fd, tmp_path = tempfile.mkstemp(prefix=".sftpgo-events-", suffix=".json", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, sort_keys=True)
+                fh.write("\n")
+            os.replace(tmp_path, self.state_path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def login_snapshot(self) -> Dict[str, LoginSnapshot]:
+        """Return a copy of the current login state."""
+        with self._lock:
+            return dict(self._logins)
+
+    def download_snapshot(self) -> Dict[str, DownloadSnapshot]:
+        """Return a copy of the current download state."""
+        with self._lock:
+            return dict(self._downloads)
+
+    def record_login(self, username: str, method: str, protocol: str, ip: str, status: int) -> Optional[LoginSnapshot]:
+        """
+        Record a successful SFTPGo post-login event.
+
+        Returns the stored snapshot, or ``None`` if the event should be ignored.
+        """
+        if status != 1 or not username:
+            return None
+
+        ts = time.time()
+        with self._lock:
+            previous = self._logins.get(username)
+            successful_logins = 1
+            if previous is not None:
+                successful_logins = previous.successful_logins + 1
+
+            snap = LoginSnapshot(
+                username=username,
+                last_login_ts=ts,
+                method=method,
+                protocol=protocol,
+                ip=ip,
+                successful_logins=successful_logins,
+            )
+            self._logins[username] = snap
+            self._save_locked()
+            return snap
+
+    def record_download(self, event: Dict[str, Any]) -> Optional[DownloadSnapshot]:
+        """
+        Record a successful SFTPGo download event.
+
+        Returns the stored snapshot, or ``None`` if the event should be ignored.
+        """
+        if event.get("action") != "download":
+            return None
+        if int_or_default(event.get("status", 0)) != 1:
+            return None
+
+        username = event.get("username")
+        if not isinstance(username, str) or not username:
+            return None
+
+        ts = parse_sftpgo_event_timestamp(event.get("timestamp"))
+        if ts <= 0:
+            ts = time.time()
+
+        file_path = str(event.get("path", "") or "")
+        virtual_path = str(event.get("virtual_path", "") or "")
+        filename = download_filename(file_path, virtual_path)
+        file_size = int_or_default(event.get("file_size", 0))
+        protocol = str(event.get("protocol", "") or "")
+        ip = str(event.get("ip", "") or "")
+
+        with self._lock:
+            previous = self._downloads.get(username)
+            successful_downloads = 1
+            if previous is not None:
+                successful_downloads = previous.successful_downloads + 1
+                if previous.last_download_ts > ts:
+                    ts = previous.last_download_ts
+                    filename = previous.filename
+                    file_path = previous.file_path
+                    virtual_path = previous.virtual_path
+                    file_size = previous.file_size
+                    protocol = previous.protocol
+                    ip = previous.ip
+
+            snap = DownloadSnapshot(
+                username=username,
+                last_download_ts=ts,
+                filename=filename,
+                file_path=file_path,
+                virtual_path=virtual_path,
+                file_size=file_size,
+                protocol=protocol,
+                ip=ip,
+                successful_downloads=successful_downloads,
+            )
+            self._downloads[username] = snap
+            self._save_locked()
+            return snap
+
+
 class ExporterState:
     """Thread-safe in-memory cache for SFTPGo user snapshots and refresh metadata."""
 
-    def __init__(self, client: SFTPGoClient, refresh_interval_seconds: int):
+    def __init__(self, client: SFTPGoClient, refresh_interval_seconds: int, event_store: SFTPGoEventStore):
         self.client = client
         self.refresh_interval_seconds = refresh_interval_seconds
+        self.event_store = event_store
         self._lock = Lock()
         self._last_refresh_ts: float = 0
         self._last_success_ts: float = 0
@@ -308,6 +571,8 @@ class ExporterState:
             try:
                 raw_users = self.client.fetch_users()
                 users: Dict[str, UserSnapshot] = {}
+                logins = self.event_store.login_snapshot()
+                downloads = self.event_store.download_snapshot()
                 for item in raw_users:
                     if not isinstance(item, dict):
                         continue
@@ -320,7 +585,16 @@ class ExporterState:
                         last_login_ts = float(last_login_ms) / 1000.0
                     else:
                         last_login_ts = 0.0
-                    users[username] = UserSnapshot(username=username, status=status, last_login_ts=last_login_ts)
+                    login = logins.get(username)
+                    if login is not None and login.last_login_ts > 0:
+                        last_login_ts = login.last_login_ts
+                    last_download_ts = downloads.get(username).last_download_ts if username in downloads else 0.0
+                    users[username] = UserSnapshot(
+                        username=username,
+                        status=status,
+                        last_login_ts=last_login_ts,
+                        last_download_ts=last_download_ts,
+                    )
 
                 self._users = users
                 self._last_success_ts = now
@@ -380,6 +654,17 @@ def create_app() -> Flask:
     managed_folder_path = os.getenv("EPG_ADMIN_MANAGED_FOLDER_PATH", "/srv/epg/EPG")
     managed_group_name = os.getenv("EPG_ADMIN_MANAGED_GROUP_NAME", "epg-customers-ro")
     managed_virtual_path = os.getenv("EPG_ADMIN_MANAGED_VIRTUAL_PATH", "/EPG")
+    epg_files_root = os.getenv("EPG_FILES_ROOT", managed_folder_path)
+    epg_files_max_entries = int(os.getenv("EPG_FILES_MAX_ENTRIES", "5000"))
+    epg_bundle_root = os.getenv("EPG_BUNDLE_ROOT", epg_files_root)
+    epg_bundle_expected_count = int(os.getenv("EPG_BUNDLE_EXPECTED_COUNT", "52"))
+    epg_bundle_freshness_max_age_hours = int(os.getenv("EPG_BUNDLE_FRESHNESS_MAX_AGE_HOURS", "48"))
+    epg_bundle_freshness_max_age_seconds = epg_bundle_freshness_max_age_hours * 3600
+    event_state_path = os.getenv(
+        "EPG_ADMIN_EVENT_STATE_PATH",
+        os.getenv("EPG_ADMIN_DOWNLOAD_STATE_PATH", "/var/lib/epg-admin/sftpgo-events.json"),
+    )
+    download_event_token = os.getenv("EPG_ADMIN_DOWNLOAD_EVENT_TOKEN", "")
 
     # Exporter client uses service credentials supplied via environment.
     metrics_client = SFTPGoClient(
@@ -388,7 +673,12 @@ def create_app() -> Flask:
         username=api_username,
         password=api_password,
     )
-    state = ExporterState(client=metrics_client, refresh_interval_seconds=refresh_interval_seconds)
+    event_store = SFTPGoEventStore(event_state_path)
+    state = ExporterState(
+        client=metrics_client,
+        refresh_interval_seconds=refresh_interval_seconds,
+        event_store=event_store,
+    )
 
     app = Flask(
         __name__,
@@ -494,24 +784,43 @@ def create_app() -> Flask:
                 }
             )
 
-    def format_last_login(last_login_ms: Any) -> tuple[str, bool]:
-        """Return human-readable last login string and stale flag."""
+    def api_last_login_ts(last_login_ms: Any) -> float:
+        """Return SFTPGo API last_login as Unix seconds, or 0 if missing."""
         if isinstance(last_login_ms, (int, float)) and last_login_ms > 0:
-            ts = float(last_login_ms) / 1000.0
-            age = max(0.0, time.time() - ts)
-            return now_utc_iso(ts), age > stale_after_seconds
+            return float(last_login_ms) / 1000.0
+        return 0.0
+
+    def format_last_login(last_login_ts: float) -> tuple[str, bool]:
+        """Return human-readable last login string and stale flag."""
+        if last_login_ts > 0:
+            age = max(0.0, time.time() - last_login_ts)
+            return now_utc_iso(last_login_ts), age > stale_after_seconds
+        return "Never", False
+
+    def format_last_download(last_download_ts: float) -> tuple[str, bool]:
+        """Return human-readable last successful download string and stale flag."""
+        if last_download_ts > 0:
+            age = max(0.0, time.time() - last_download_ts)
+            return now_utc_iso(last_download_ts), age > stale_after_seconds
         return "Never", False
 
     def build_user_rows(raw_users: List[dict]) -> List[dict]:
         """Transform raw SFTPGo users into table rows for the admin UI."""
         rows = []
+        logins = event_store.login_snapshot()
+        downloads = event_store.download_snapshot()
         for item in raw_users:
             username = item.get("username")
             if not isinstance(username, str) or not username:
                 continue
             status_value = int(item.get("status", 0)) if item.get("status") is not None else 0
             enabled = status_value == 1
-            last_login_label, stale = format_last_login(item.get("last_login", 0))
+            login = logins.get(username)
+            last_login_ts = login.last_login_ts if login is not None else api_last_login_ts(item.get("last_login", 0))
+            last_login_label, stale = format_last_login(last_login_ts)
+            download = downloads.get(username)
+            last_download_ts = download.last_download_ts if download is not None else 0.0
+            last_download_label, download_stale = format_last_download(last_download_ts)
             rows.append(
                 {
                     "username": username,
@@ -519,11 +828,115 @@ def create_app() -> Flask:
                     "status": "enabled" if enabled else "disabled",
                     "enabled": enabled,
                     "last_login": last_login_label,
+                    "last_login_source": "webhook" if login is not None else "sftpgo",
+                    "last_download": last_download_label,
+                    "last_download_filename": download.filename if download is not None else "",
+                    "last_download_path": download.virtual_path if download is not None else "",
+                    "download_stale": download_stale if enabled else False,
                     "stale": stale if enabled else False,
                 }
             )
         rows.sort(key=lambda r: r["username"])
         return rows
+
+    def format_size(num_bytes: int) -> str:
+        """Return a compact human-readable byte size string."""
+        if num_bytes < 1024:
+            return f"{num_bytes} B"
+        units = ["KB", "MB", "GB", "TB", "PB"]
+        size = float(num_bytes)
+        for unit in units:
+            size /= 1024.0
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+        return f"{size:.1f} EB"
+
+    def list_epg_files() -> tuple[List[dict], bool]:
+        """
+        Recursively list files under the configured EPG root path.
+
+        Returns ``(files, truncated)`` where ``truncated`` indicates the
+        ``EPG_FILES_MAX_ENTRIES`` limit was reached.
+        """
+        root = os.path.abspath(epg_files_root)
+        if not os.path.isdir(root):
+            raise ValueError(f"EPG files root not found: {root}")
+
+        files: List[dict] = []
+        truncated = False
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames.sort()
+            filenames.sort()
+            rel_dir = os.path.relpath(dirpath, root)
+            if rel_dir == ".":
+                rel_dir = ""
+
+            for filename in filenames:
+                full_path = os.path.join(dirpath, filename)
+                try:
+                    st = os.stat(full_path)
+                except OSError:
+                    continue
+                rel_path = os.path.join(rel_dir, filename).replace(os.sep, "/")
+                files.append(
+                    {
+                        "path": rel_path,
+                        "size_bytes": int(st.st_size),
+                        "size_label": format_size(int(st.st_size)),
+                        "modified": now_utc_iso(float(st.st_mtime)),
+                    }
+                )
+                if len(files) >= epg_files_max_entries:
+                    truncated = True
+                    break
+
+            if truncated:
+                break
+
+        files.sort(key=lambda item: item["path"])
+        return files, truncated
+
+    def scan_epg_bundles() -> dict:
+        """Return freshness/count details for generated EPG ZIP bundles."""
+        root = os.path.abspath(epg_bundle_root)
+        result: dict[str, Any] = {
+            "root": root,
+            "count": 0,
+            "latest_ts": 0.0,
+            "latest_filename": "",
+            "latest_path": "",
+            "latest_size": 0,
+            "scan_error": "",
+        }
+        if not os.path.isdir(root):
+            result["scan_error"] = "root_not_found"
+            return result
+
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames.sort()
+            filenames.sort()
+            rel_dir = os.path.relpath(dirpath, root)
+            if rel_dir == ".":
+                rel_dir = ""
+
+            for filename in filenames:
+                if not filename.lower().endswith(".zip"):
+                    continue
+                full_path = os.path.join(dirpath, filename)
+                try:
+                    st = os.stat(full_path)
+                except OSError:
+                    continue
+
+                result["count"] += 1
+                modified_ts = float(st.st_mtime)
+                if modified_ts >= result["latest_ts"]:
+                    result["latest_ts"] = modified_ts
+                    result["latest_filename"] = filename
+                    result["latest_path"] = os.path.join(rel_dir, filename).replace(os.sep, "/")
+                    result["latest_size"] = int(st.st_size)
+
+        return result
 
     @app.get("/")
     def root() -> Response:
@@ -541,6 +954,65 @@ def create_app() -> Flask:
             "last_success_timestamp": state.last_success_ts,
             "last_error": state.last_error,
         }, status
+
+    @app.post("/internal/sftpgo/download-event")
+    def sftpgo_download_event() -> tuple[dict, int]:
+        """Receive SFTPGo successful download hook events."""
+        if download_event_token:
+            supplied_token = request.headers.get("X-EPG-Event-Token", "") or request.args.get("token", "")
+            if not secrets.compare_digest(supplied_token, download_event_token):
+                return {"status": "unauthorized"}, 401
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return {"status": "bad_request", "error": "JSON object body required"}, 400
+
+        snap = event_store.record_download(payload)
+        if snap is None:
+            return {"status": "ignored"}, 202
+
+        return {
+            "status": "recorded",
+            "username": snap.username,
+            "last_download_timestamp": snap.last_download_ts,
+            "filename": snap.filename,
+        }, 200
+
+    @app.post("/internal/sftpgo/login-event")
+    def sftpgo_login_event() -> tuple[dict, int]:
+        """Receive SFTPGo successful post-login hook events."""
+        if download_event_token:
+            supplied_token = request.headers.get("X-EPG-Event-Token", "") or request.args.get("token", "")
+            if not secrets.compare_digest(supplied_token, download_event_token):
+                return {"status": "unauthorized"}, 401
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return {"status": "bad_request", "error": "JSON object body required"}, 400
+
+        username = payload.get("username")
+        if not isinstance(username, str):
+            username = ""
+        username = username.strip()
+
+        snap = event_store.record_login(
+            username=username,
+            method=request.args.get("login_method", ""),
+            protocol=request.args.get("protocol", ""),
+            ip=request.args.get("ip", ""),
+            status=int_or_default(request.args.get("status", 0)),
+        )
+        if snap is None:
+            return {"status": "ignored"}, 202
+
+        return {
+            "status": "recorded",
+            "username": snap.username,
+            "last_login_timestamp": snap.last_login_ts,
+            "method": snap.method,
+            "protocol": snap.protocol,
+            "ip": snap.ip,
+        }, 200
 
     @app.get("/metrics")
     def metrics() -> Response:
@@ -587,16 +1059,135 @@ def create_app() -> Flask:
             ["username", "customer_label", "status"],
             registry=registry,
         )
+        g_login_info = Gauge(
+            "sftpgo_user_last_login_info",
+            "Metadata for the last successful login webhook event per SFTPGo user",
+            ["username", "customer_label", "status", "method", "protocol", "ip"],
+            registry=registry,
+        )
+        g_last_download = Gauge(
+            "sftpgo_user_last_successful_download_timestamp",
+            "Last successful file download time per SFTPGo user as unix timestamp, 0 if never",
+            ["username", "customer_label", "status"],
+            registry=registry,
+        )
+        g_download_age = Gauge(
+            "sftpgo_user_seconds_since_last_successful_download",
+            "Seconds since last successful file download per SFTPGo user, -1 if never",
+            ["username", "customer_label", "status"],
+            registry=registry,
+        )
+        g_download_stale = Gauge(
+            "sftpgo_user_download_stale",
+            "1 when enabled user last successful download is older than STALE_AFTER_HOURS, else 0",
+            ["username", "customer_label", "status"],
+            registry=registry,
+        )
+        g_downloads_total = Gauge(
+            "sftpgo_user_successful_downloads_total",
+            "Successful download events recorded by epg-admin per SFTPGo user",
+            ["username", "customer_label", "status"],
+            registry=registry,
+        )
+        g_download_info = Gauge(
+            "sftpgo_user_last_successful_download_info",
+            "Metadata for the last successful file download per SFTPGo user",
+            ["username", "customer_label", "status", "filename", "virtual_path"],
+            registry=registry,
+        )
+        g_bundle_latest_modified = Gauge(
+            "epg_bundle_latest_modified_timestamp",
+            "Unix timestamp for the newest generated EPG ZIP bundle visible to epg-admin, 0 if none",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_age = Gauge(
+            "epg_bundle_seconds_since_latest_modified",
+            "Seconds since newest generated EPG ZIP bundle was modified, -1 if none",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_count = Gauge(
+            "epg_bundle_file_count",
+            "Number of generated EPG ZIP bundles currently visible to epg-admin",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_expected_count = Gauge(
+            "epg_bundle_expected_file_count",
+            "Expected number of generated EPG ZIP bundles",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_missing_count = Gauge(
+            "epg_bundle_missing_expected_file_count",
+            "Expected EPG ZIP bundle count minus visible count, floored at 0",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_generation_stale = Gauge(
+            "epg_bundle_generation_stale",
+            "1 when generated EPG bundles are missing or newest bundle is older than EPG_BUNDLE_FRESHNESS_MAX_AGE_HOURS",
+            ["root"],
+            registry=registry,
+        )
+        g_bundle_latest_info = Gauge(
+            "epg_bundle_latest_info",
+            "Metadata for the newest generated EPG ZIP bundle visible to epg-admin",
+            ["root", "filename", "relative_path"],
+            registry=registry,
+        )
+        g_bundle_scan_error = Gauge(
+            "epg_bundle_scan_error",
+            "1 when epg-admin cannot scan the configured EPG bundle root",
+            ["root", "error"],
+            registry=registry,
+        )
 
         g_up.set(1 if state.last_success_ts > 0 else 0)
         g_last_success.set(state.last_success_ts)
         g_errors.set(state.error_count)
 
         now = time.time()
+        bundle_scan = scan_epg_bundles()
+        bundle_root = str(bundle_scan["root"])
+        bundle_count = int(bundle_scan["count"])
+        bundle_latest_ts = float(bundle_scan["latest_ts"])
+        bundle_age_seconds = -1.0 if bundle_latest_ts <= 0 else max(0.0, now - bundle_latest_ts)
+        bundle_missing_count = max(0, epg_bundle_expected_count - bundle_count)
+        bundle_scan_error = str(bundle_scan["scan_error"])
+        bundle_is_stale = (
+            bool(bundle_scan_error)
+            or bundle_latest_ts <= 0
+            or bundle_missing_count > 0
+            or bundle_age_seconds > epg_bundle_freshness_max_age_seconds
+        )
+
+        g_bundle_latest_modified.labels(root=bundle_root).set(bundle_latest_ts)
+        g_bundle_age.labels(root=bundle_root).set(bundle_age_seconds)
+        g_bundle_count.labels(root=bundle_root).set(bundle_count)
+        g_bundle_expected_count.labels(root=bundle_root).set(epg_bundle_expected_count)
+        g_bundle_missing_count.labels(root=bundle_root).set(bundle_missing_count)
+        g_bundle_generation_stale.labels(root=bundle_root).set(1 if bundle_is_stale else 0)
+        g_bundle_scan_error.labels(root=bundle_root, error=bundle_scan_error or "none").set(1 if bundle_scan_error else 0)
+        if bundle_latest_ts > 0:
+            g_bundle_latest_info.labels(
+                root=bundle_root,
+                filename=str(bundle_scan["latest_filename"]),
+                relative_path=str(bundle_scan["latest_path"]),
+            ).set(1)
+
+        logins = event_store.login_snapshot()
+        downloads = event_store.download_snapshot()
         for username in sorted(state.users.keys()):
             snap = state.users[username]
             customer_label = username
-            age_seconds = -1.0 if snap.last_login_ts <= 0 else max(0.0, now - snap.last_login_ts)
+            login = logins.get(username)
+            last_login_ts = login.last_login_ts if login is not None else snap.last_login_ts
+            age_seconds = -1.0 if last_login_ts <= 0 else max(0.0, now - last_login_ts)
+            download = downloads.get(username)
+            last_download_ts = download.last_download_ts if download is not None else 0.0
+            download_age_seconds = -1.0 if last_download_ts <= 0 else max(0.0, now - last_download_ts)
 
             if snap.status != "enabled":
                 stale = 0
@@ -605,14 +1196,38 @@ def create_app() -> Flask:
             else:
                 stale = 1 if age_seconds > stale_after_seconds else 0
 
+            if snap.status != "enabled":
+                download_stale = 0
+            elif download_age_seconds < 0:
+                download_stale = 0
+            else:
+                download_stale = 1 if download_age_seconds > stale_after_seconds else 0
+
             labels = {
                 "username": username,
                 "customer_label": customer_label,
                 "status": snap.status,
             }
-            g_last_login.labels(**labels).set(snap.last_login_ts)
+            g_last_login.labels(**labels).set(last_login_ts)
             g_age.labels(**labels).set(age_seconds)
             g_stale.labels(**labels).set(stale)
+            if login is not None:
+                g_login_info.labels(
+                    **labels,
+                    method=login.method,
+                    protocol=login.protocol,
+                    ip=login.ip,
+                ).set(1)
+            g_last_download.labels(**labels).set(last_download_ts)
+            g_download_age.labels(**labels).set(download_age_seconds)
+            g_download_stale.labels(**labels).set(download_stale)
+            g_downloads_total.labels(**labels).set(download.successful_downloads if download is not None else 0)
+            if download is not None:
+                g_download_info.labels(
+                    **labels,
+                    filename=download.filename,
+                    virtual_path=download.virtual_path,
+                ).set(1)
 
         exporter_output = generate_latest(registry).decode("utf-8")
         if not merge_native_metrics:
@@ -692,6 +1307,32 @@ def create_app() -> Flask:
             flashes=flashes,
             error=error,
             refreshed_at=now_utc_iso(),
+        )
+        return Response(html, mimetype="text/html")
+
+    @app.get("/admin/files")
+    def admin_files() -> Response:
+        """Render an inventory of files available under the shared EPG root."""
+        session = require_admin_session()
+        if session is None:
+            return redirect(url_for("admin_login"))
+
+        error = ""
+        files: List[dict] = []
+        truncated = False
+        try:
+            files, truncated = list_epg_files()
+        except (ValueError, OSError) as exc:
+            error = f"Failed to read files: {exc}"
+
+        html = render_template(
+            "admin_files.html",
+            admin_username=session.username,
+            files=files,
+            truncated=truncated,
+            files_root=os.path.abspath(epg_files_root),
+            refreshed_at=now_utc_iso(),
+            error=error,
         )
         return Response(html, mimetype="text/html")
 

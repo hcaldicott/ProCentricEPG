@@ -45,7 +45,7 @@ services:
       # Enable FTP on port 21 (same as current deployment)
       SFTPGO_FTPD__BINDINGS__0__PORT: "21"
       SFTPGO_FTPD__BINDINGS__0__ADDRESS: "0.0.0.0"
-      SFTPGO_FTPD__DISABLE_ACTIVE_MODE: "0"
+      SFTPGO_FTPD__DISABLE_ACTIVE_MODE: "1"
 
       # Keep passive mode behavior/range aligned with existing setup.
       SFTPGO_FTPD__PASSIVE_PORT_RANGE__START: "21100"
@@ -73,6 +73,10 @@ services:
       SFTPGO_TELEMETRY__BIND_ADDRESS: "0.0.0.0"
       SFTPGO_DATA_PROVIDER__NAME: "/var/lib/sftpgo/sftpgo.db"
       SFTPGO_DATA_PROVIDER__BACKUPS_PATH: "/var/lib/sftpgo/backups"
+      SFTPGO_DATA_PROVIDER__POST_LOGIN_HOOK: "http://epg-admin:8081/internal/sftpgo/login-event"
+      SFTPGO_DATA_PROVIDER__POST_LOGIN_SCOPE: "2"
+      SFTPGO_COMMON__ACTIONS__EXECUTE_ON: "download"
+      SFTPGO_COMMON__ACTIONS__HOOK: "http://epg-admin:8081/internal/sftpgo/download-event"
 
       # Create initial admin account on first startup.
       SFTPGO_DEFAULT_ADMIN_USERNAME: "${SFTPGO_ADMIN_USERNAME:-admin}"
@@ -130,8 +134,15 @@ services:
       MERGE_SFTPGO_NATIVE_METRICS: "true"
       SFTPGO_NATIVE_METRICS_URL: "http://ftp-server:10000/metrics"
       EPG_ADMIN_MANAGED_FOLDER_PATH: "/srv/epg/EPG"
+      EPG_BUNDLE_ROOT: "/srv/epg/EPG"
+      EPG_BUNDLE_EXPECTED_COUNT: "52"
+      EPG_BUNDLE_FRESHNESS_MAX_AGE_HOURS: "48"
+      EPG_ADMIN_EVENT_STATE_PATH: "/var/lib/epg-admin/sftpgo-events.json"
     ports:
       - "8081:8081"
+    volumes:
+      - bundles:/srv/epg:ro
+      - epg-admin-state:/var/lib/epg-admin
     restart: unless-stopped
     healthcheck:
       test:
@@ -151,3 +162,4 @@ services:
 volumes:
   bundles:
   sftpgo-data:
+  epg-admin-state:

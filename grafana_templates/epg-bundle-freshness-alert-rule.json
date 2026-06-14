@@ -1,17 +1,17 @@
 {
-  "title": "SFTPGo User No Recent EPG Download",
-  "ruleGroup": "sftpgo-user-download-staleness",
+  "title": "EPG Bundle Generation Stale",
+  "ruleGroup": "epg-bundle-generation",
   "folderUID": "general",
-  "for": "0s",
+  "for": "15m",
   "noDataState": "NoData",
   "execErrState": "Error",
   "condition": "B",
   "labels": {
-    "severity": "warning"
+    "severity": "critical"
   },
   "annotations": {
-    "summary": "SFTPGo user has not downloaded EPG data recently",
-    "description": "At least one enabled SFTPGo user has not successfully downloaded an EPG file within threshold."
+    "summary": "Generated EPG bundles are stale or incomplete",
+    "description": "The newest generated EPG bundle is too old, no bundle is visible, the bundle root cannot be scanned, or the visible bundle count is below the expected count."
   },
   "data": [
     {
@@ -24,10 +24,10 @@
       "datasourceUid": "PROMETHEUS_DS_UID",
       "model": {
         "editorMode": "code",
-        "expr": "max by (username, customer_label) (sftpgo_user_download_stale{status=\"enabled\"})",
+        "expr": "max(epg_bundle_generation_stale)",
         "instant": true,
         "intervalMs": 1000,
-        "legendFormat": "{{username}} ({{customer_label}})",
+        "legendFormat": "bundle generation stale",
         "maxDataPoints": 43200,
         "range": false,
         "refId": "A"
