@@ -82,3 +82,5 @@ spec:
               value: "true"
             - name: SFTPGO_NATIVE_METRICS_URL
               value: "http://ftp-server-metrics:10000/metrics"
+            - name: EPG_ADMIN_MANAGED_FOLDER_PATH
+              value: "/srv/epg/EPG"

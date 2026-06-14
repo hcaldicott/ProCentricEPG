@@ -377,7 +377,7 @@ def create_app() -> Flask:
     admin_session_ttl_seconds = int(os.getenv("EPG_ADMIN_SESSION_TTL_SECONDS", "1800"))
 
     managed_folder_name = os.getenv("EPG_ADMIN_MANAGED_FOLDER_NAME", "epg-bundles")
-    managed_folder_path = os.getenv("EPG_ADMIN_MANAGED_FOLDER_PATH", "/srv/epg")
+    managed_folder_path = os.getenv("EPG_ADMIN_MANAGED_FOLDER_PATH", "/srv/epg/EPG")
     managed_group_name = os.getenv("EPG_ADMIN_MANAGED_GROUP_NAME", "epg-customers-ro")
     managed_virtual_path = os.getenv("EPG_ADMIN_MANAGED_VIRTUAL_PATH", "/EPG")
 

@@ -129,6 +129,7 @@ services:
       WAITRESS_CONNECTION_LIMIT: "50"
       MERGE_SFTPGO_NATIVE_METRICS: "true"
       SFTPGO_NATIVE_METRICS_URL: "http://ftp-server:10000/metrics"
+      EPG_ADMIN_MANAGED_FOLDER_PATH: "/srv/epg/EPG"
     ports:
       - "8081:8081"
     restart: unless-stopped
