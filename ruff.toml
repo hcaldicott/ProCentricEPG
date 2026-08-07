@@ -1,0 +1,7 @@
+target-version = "py311"
+
+[lint]
+# Keep the project's established pre-0.16 Ruff baseline explicit. Ruff 0.16
+# expanded its implicit defaults from 59 to 413 rules, which caused unchanged
+# legacy code to fail CI when the workflow installed the latest release.
+select = ["E4", "E7", "E9", "F"]
