@@ -10,7 +10,7 @@ import logging
 import requests
 import pytz
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from models.epg_model import ProgramGuide, Channel, Event
 from utils.text_utils import safe_find_text_xml, safe_find_rating_value_xml
 from utils.calculation_utils import calculate_total_event_minutes
@@ -93,13 +93,16 @@ class XMLTV:
                         logging.warning(f"Skipping programme with missing start/stop time for channel {channel_id}")
                         continue
 
-                    # Convert start time to local timezone
-                    utc_time = datetime.strptime(start, "%Y%m%d%H%M%S %z")  # Parse with timezone
-                    local_tz = pytz.FixedOffset(self.timezone * 60)  # Convert minutes offset to tzinfo
-                    local_time = utc_time.astimezone(local_tz)  # Convert to local time
+                    # Pro:Centric interprets event dates/times as UTC and applies the
+                    # appliance's configured timezone when displaying the guide.
+                    # Normalise the XMLTV value to UTC instead of pre-converting it to
+                    # the destination timezone, which would apply the offset twice.
+                    start_datetime = datetime.strptime(start, "%Y%m%d%H%M%S %z")
+                    stop_datetime = datetime.strptime(stop, "%Y%m%d%H%M%S %z")
+                    start_utc = start_datetime.astimezone(timezone.utc)
 
-                    formatted_date = local_time.strftime("%Y-%m-%d")  # Extract date
-                    start_time = local_time.strftime("%H%M")  # Extract time in HH:MM format
+                    formatted_date = start_utc.strftime("%Y-%m-%d")
+                    start_time = start_utc.strftime("%H%M")
 
                     event = Event(
                         eventID=self.generate_random_string(),
@@ -108,7 +111,7 @@ class XMLTV:
                         rating=safe_find_rating_value_xml(programme_elem),
                         date=formatted_date,
                         startTime=start_time,
-                        length=str(int((datetime.strptime(stop, "%Y%m%d%H%M%S %z") - utc_time).total_seconds() // 60)),
+                        length=str(int((stop_datetime - start_datetime).total_seconds() // 60)),
                         genre=safe_find_text_xml(programme_elem, 'category')
                     )
                     channel.events.append(event)
